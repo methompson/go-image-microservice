@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "start": "nodemon main.go"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.12"
+  }
+}

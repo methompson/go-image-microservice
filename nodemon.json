@@ -1,0 +1,14 @@
+{
+  "env": {
+    "PORT": 80,
+    "PROCESS_NAME": "image-microservice"
+  },
+  "events": {
+    "restart": "PID=$(lsof -t -c $PROCESS_NAME | tr '\n' ' '); if [[ -n $PID ]]; then echo \"killing PID(s): $PID\"; kill -KILL $PID 2> /dev/null; fi"
+  },
+  "ext": "go",
+  "execMap": {
+    "go": "go run ."
+  },
+  "ignore": ["vendor/"]
+}
