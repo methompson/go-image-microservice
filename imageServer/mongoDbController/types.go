@@ -3,7 +3,7 @@ package mongoDbController
 import (
 	"time"
 
-	"methompson.com/image-microservice/ImageServer/dbController"
+	"methompson.com/image-microservice/imageServer/dbController"
 )
 
 type UserDocResult struct {

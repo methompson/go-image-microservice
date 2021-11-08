@@ -9,7 +9,7 @@ type DatabaseController interface {
 
 	AddImageData(doc *AddImageDocument) (id string, err error)
 	GetImageDataById(id string) (*ImageDocument, error)
-	GetImagesData(page int, pagination int) (*[]ImageDocument, error)
+	GetImagesData(page int, pagination int) ([]*ImageDocument, error)
 	EditImageData(doc *EditImageDocument) error
 	DeleteImageData(doc *DeleteImageDocument) error
 

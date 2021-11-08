@@ -15,7 +15,7 @@ import (
 	"methompson.com/image-microservice/imageServer/logging"
 )
 
-const BLOG_COLLECTION = "blogPosts"
+const IMAGE_COLLECTION = "images"
 const LOGGING_COLLECTION = "logging"
 const USER_COLLECTION = "users"
 
@@ -36,28 +36,20 @@ func (mdbc *MongoDbController) getCollection(collectionName string) (*mongo.Coll
 	return collection, backCtx, cancel
 }
 
-func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
+func (mdbc *MongoDbController) initImageCollection(dbName string) error {
 	db := mdbc.MongoClient.Database(dbName)
 
 	jsonSchema := bson.M{
 		"bsonType": "object",
-		"required": []string{"title", "slug", "authorId", "dateAdded", "updateAuthorId", "dateUpdated"},
+		"required": []string{"fileName", "locations", "authorId", "dateAdded"},
 		"properties": bson.M{
-			"title": bson.M{
+			"fileName": bson.M{
 				"bsonType":    "string",
-				"description": "title must be a string",
+				"description": "fileName must be a string",
 			},
-			"slug": bson.M{
-				"bsonType":    "string",
-				"description": "slug must be a string",
-			},
-			"body": bson.M{
-				"bsonType":    "string",
-				"description": "body must be a string",
-			},
-			"tags": bson.M{
+			"locations": bson.M{
 				"bsonType":    "array",
-				"description": "tags must be an array",
+				"description": "locations must be an array",
 			},
 			"authorId": bson.M{
 				"bsonType":    "string",
@@ -67,20 +59,12 @@ func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
 				"bsonType":    "timestamp",
 				"description": "dateAdded must be a timestamp",
 			},
-			"updateAuthorId": bson.M{
-				"bsonType":    "string",
-				"description": "updateAuthorId must be a string",
-			},
-			"dateUpdated": bson.M{
-				"bsonType":    "timestamp",
-				"description": "dateUpdated must be a timestamp",
-			},
 		},
 	}
 
 	colOpts := options.CreateCollection().SetValidator(bson.M{"$jsonSchema": jsonSchema})
 
-	createCollectionErr := db.CreateCollection(context.TODO(), BLOG_COLLECTION, colOpts)
+	createCollectionErr := db.CreateCollection(context.TODO(), IMAGE_COLLECTION, colOpts)
 
 	if createCollectionErr != nil {
 		return dbController.NewDBError(createCollectionErr.Error())
@@ -88,76 +72,14 @@ func (mdbc *MongoDbController) initBlogCollection(dbName string) error {
 
 	models := []mongo.IndexModel{
 		{
-			Keys:    bson.M{"slug": 1},
+			Keys:    bson.M{"fileName": 1},
 			Options: options.Index().SetUnique(true),
 		},
 	}
 
 	opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
 
-	collection, _, _ := mdbc.getCollection(BLOG_COLLECTION)
-	_, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
-
-	if setIndexErr != nil {
-		return dbController.NewDBError(setIndexErr.Error())
-	}
-
-	return nil
-}
-
-func (mdbc *MongoDbController) initUserCollection(dbName string) error {
-	db := mdbc.MongoClient.Database(dbName)
-
-	jsonSchema := bson.M{
-		"bsonType": "object",
-		// "required": []string{"uid"},
-		"required": []string{"uid", "name", "email", "active", "role"},
-		"properties": bson.M{
-			"uid": bson.M{
-				"bsonType":    "string",
-				"description": "uid must be a string",
-			},
-			"name": bson.M{
-				"bsonType":    "string",
-				"description": "name must be a string",
-			},
-			"email": bson.M{
-				"bsonType":    "string",
-				"description": "email must be a string",
-			},
-			"active": bson.M{
-				"bsonType":    "bool",
-				"description": "active must be a bool",
-			},
-			"role": bson.M{
-				"bsonType":    "string",
-				"description": "role must be a string",
-			},
-		},
-	}
-
-	colOpts := options.CreateCollection().SetValidator(bson.M{"$jsonSchema": jsonSchema})
-
-	createCollectionErr := db.CreateCollection(context.TODO(), USER_COLLECTION, colOpts)
-
-	if createCollectionErr != nil {
-		return dbController.NewDBError(createCollectionErr.Error())
-	}
-
-	models := []mongo.IndexModel{
-		{
-			Keys:    bson.M{"uid": 1},
-			Options: options.Index().SetUnique(true),
-		},
-		{
-			Keys:    bson.M{"email": 1},
-			Options: options.Index().SetUnique(true),
-		},
-	}
-
-	opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
-
-	collection, _, _ := mdbc.getCollection(USER_COLLECTION)
+	collection, _, _ := mdbc.getCollection(IMAGE_COLLECTION)
 	_, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
 
 	if setIndexErr != nil {
@@ -199,16 +121,10 @@ func (mdbc *MongoDbController) initLoggingCollection(dbName string) error {
 }
 
 func (mdbc *MongoDbController) InitDatabase() error {
-	blogCreationErr := mdbc.initBlogCollection(mdbc.dbName)
+	imageCreationErr := mdbc.initImageCollection(mdbc.dbName)
 
-	if blogCreationErr != nil && !strings.Contains(blogCreationErr.Error(), "Collection already exists") {
-		return blogCreationErr
-	}
-
-	userCreationErr := mdbc.initUserCollection(mdbc.dbName)
-
-	if userCreationErr != nil && !strings.Contains(userCreationErr.Error(), "Collection already exists") {
-		return userCreationErr
+	if imageCreationErr != nil && !strings.Contains(imageCreationErr.Error(), "Collection already exists") {
+		return imageCreationErr
 	}
 
 	loggingCreationErr := mdbc.initLoggingCollection(mdbc.dbName)
