@@ -2,6 +2,7 @@ package imageServer
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -246,4 +247,12 @@ type ImageServer struct {
 
 func (srv *ImageServer) StartServer() {
 	srv.GinEngine.Run()
+}
+
+func (srv *ImageServer) ParseFormMetadata(metaStr string) *ImageFormMetaData {
+	var meta *ImageFormMetaData = GetDefaultImageFormMetaData()
+
+	json.Unmarshal([]byte(metaStr), meta)
+
+	return meta
 }

@@ -90,3 +90,13 @@ func (dbb *DeleteImageBody) GetBlogDocument() *dbController.DeleteImageDocument 
 
 	return &doc
 }
+
+type ImageFormMetaData struct {
+	Private bool `json:"private"`
+}
+
+func GetDefaultImageFormMetaData() *ImageFormMetaData {
+	return &ImageFormMetaData{
+		Private: false,
+	}
+}
