@@ -8,12 +8,44 @@ import (
 )
 
 func (srv *ImageServer) SetRoutes() {
-	srv.GinEngine.GET("/image", srv.GetImagesByFirstPage)
-	srv.GinEngine.GET("/image/page/:page", srv.GetImagesByPage)
+	srv.GinEngine.GET("/images", srv.GetImagesByFirstPage)
+	srv.GinEngine.GET("/images/page/:page", srv.GetImagesByPage)
 
-	srv.GinEngine.POST("/add-image", srv.PostAddImage)
+	srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.PostAddImage)
+	// srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.EnsureLoggedIn, srv.PostAddImage)
 	srv.GinEngine.POST("/edit-image", srv.PostEditImage)
 	srv.GinEngine.POST("/delete-image", srv.PostDeleteImage)
+}
+
+func (srv *ImageServer) SetMaxImageUploadSize(ctx *gin.Context) {
+	// TODO set an env variable for max body size
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, 5<<20)
+	ctx.Next()
+}
+
+func (srv *ImageServer) EnsureLoggedIn(ctx *gin.Context) {
+	_, role, getTokenErr := srv.GetTokenAndRoleFromHeader(ctx)
+
+	// No Token Error
+	if getTokenErr != nil {
+		fmt.Println(getTokenErr)
+		ctx.AbortWithStatusJSON(
+			http.StatusUnauthorized,
+			gin.H{"error": "invalid token"},
+		)
+		return
+	}
+
+	// Role Error
+	if !srv.CanEditImages(role) {
+		ctx.AbortWithStatusJSON(
+			http.StatusUnauthorized,
+			gin.H{"error": "not authorized"},
+		)
+		return
+	}
+
+	ctx.Next()
 }
 
 func (srv *ImageServer) GetImages(ctx *gin.Context) {
