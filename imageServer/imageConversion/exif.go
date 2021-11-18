@@ -1,15 +1,8 @@
 package imageConversion
 
 import (
-	"bytes"
-	"fmt"
+	"encoding/binary"
 	"io"
-	"os"
-	"path"
-
-	"image/jpeg"
-
-	"github.com/jdeng/goheif"
 )
 
 // Skip Writer for exif writing
@@ -48,7 +41,7 @@ func (w *writerSkipper) Write(data []byte) (int, error) {
 	}
 }
 
-func newWriterExif(writer io.Writer, exif []byte) (io.Writer, error) {
+func newWriterExif(writer io.Writer, exif *exifData) (io.Writer, error) {
 	writerSkipper := &writerSkipper{writer, 2}
 
 	// jpeg file signature. jpeg file formats start with FF D8
@@ -59,25 +52,9 @@ func newWriterExif(writer io.Writer, exif []byte) (io.Writer, error) {
 	}
 
 	if exif != nil {
-		markerlen := 2 + len(exif)
+		exifData := exif.makeFileData()
 
-		fmt.Printf("heif exif length: %v\n", len(exif))
-		fmt.Printf("heif marker length: %v\n", markerlen)
-
-		// The size of the marker is represented as 2 bytes, so we have to convert the
-		// length into two bytes to place into the exif marker
-		sizeByte1 := uint8(markerlen >> 8)
-		sizeByte2 := uint8(markerlen & 0xff)
-
-		// The exif marker starts with FF E1, then the size.
-		exifMarker := []byte{0xff, 0xe1, sizeByte1, sizeByte2}
-
-		if _, err := writer.Write(exifMarker); err != nil {
-			return nil, err
-		}
-
-		// Here, we write the existing exif data to the writer.
-		if _, err := writer.Write(exif); err != nil {
+		if _, err := writer.Write(exifData); err != nil {
 			return nil, err
 		}
 	}
@@ -85,50 +62,49 @@ func newWriterExif(writer io.Writer, exif []byte) (io.Writer, error) {
 	return writerSkipper, nil
 }
 
-func encodeJpegWithExif(imageData *ImageData, exifData ExifData) ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer, _ := newWriterExif(buffer, exifData.ExifData)
-
-	opt := &jpeg.Options{
-		Quality: 75,
+func extractJpegExif(imageBytes []byte) *exifData {
+	bytesLength := len(imageBytes)
+	if bytesLength < 2 {
+		return nil
 	}
 
-	err := jpeg.Encode(writer, *imageData.ImageData, opt)
-
-	if err != nil {
-		return nil, err
+	// Check for jpeg magic bytes
+	if imageBytes[0] != 0xff || imageBytes[1] != 0xd8 {
+		return nil
 	}
 
-	return buffer.Bytes(), nil
-}
+	length := -1
+	start := -1
 
-func ConvertHeifToJpg(fileBytes []byte) ([]byte, error) {
-	reader := bytes.NewReader(fileBytes)
-	exif, err := goheif.ExtractExif(reader)
-	if err != nil {
-		return nil, err
+	// Iterate through the file to find the exif bytes
+	for i := 0; i < bytesLength-1; i++ {
+		byte1 := imageBytes[i]
+		byte2 := imageBytes[i+1]
+
+		if byte1 == 0xff && byte2 == 0xe1 {
+
+			lengthSlice := imageBytes[i+2 : i+4]
+			length = int(binary.BigEndian.Uint16(lengthSlice))
+
+			start = i + 2
+			break
+		}
 	}
 
-	path := path.Join("./files", "heif_exif.bin")
-	os.WriteFile(path, exif, 0644)
-
-	image, err := goheif.Decode(reader)
-	if err != nil {
-		return nil, err
+	if length == -1 {
+		return nil
 	}
 
-	buffer := new(bytes.Buffer)
-	writer, _ := newWriterExif(buffer, exif)
+	end := start + length
 
-	opt := &jpeg.Options{
-		Quality: 75,
+	if len(imageBytes) < end {
+		return nil
 	}
 
-	err = jpeg.Encode(writer, image, opt)
+	// We have to add 2 to go past the length bytes
+	exif := imageBytes[start+2 : end]
 
-	if err != nil {
-		return nil, err
+	return &exifData{
+		ExifData: exif,
 	}
-
-	return buffer.Bytes(), nil
 }

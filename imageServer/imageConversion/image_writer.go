@@ -2,13 +2,8 @@ package imageConversion
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
-	"fmt"
-	"image"
 	_ "image/gif"
-	jpeg "image/jpeg"
-	png "image/png"
 	"io/ioutil"
 
 	"os"
@@ -17,39 +12,31 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jdeng/goheif"
-	_ "github.com/jdeng/goheif"
-	"github.com/nfnt/resize"
 )
 
 func SaveImageFile(ctx *gin.Context) error {
 	file, fileHandler, fileErr := ctx.Request.FormFile("image")
 
 	if fileErr != nil {
-		fmt.Println("fileErr")
 		return fileErr
 	}
 	defer file.Close()
-
-	fmt.Println(fileHandler.Filename)
-	fmt.Println(fileHandler.Size)
-	fmt.Println(fileHandler.Header)
 
 	contentType := fileHandler.Header.Get("Content-Type")
 
 	fileBytes, fileBytesErr := ioutil.ReadAll(file)
 
 	if fileBytesErr != nil {
-		fmt.Println("fileBytesErr")
 		return fileBytesErr
 	}
 
 	switch contentType {
 	case "image/heic":
-		return processHeifImage(fileBytes)
+		return processNewHeifImage(fileBytes)
 	case "image/jpeg":
-		return processJpegImage(fileBytes)
+		return processNewJpegImage(fileBytes)
 	case "image/png":
-		return processPngImage(fileBytes)
+		return processNewPngImage(fileBytes)
 	case "image/gif":
 		return processGifImage(fileBytes)
 	case "image/bmp":
@@ -59,121 +46,27 @@ func SaveImageFile(ctx *gin.Context) error {
 	default:
 		return errors.New("invalid image format")
 	}
-
-	// originalImage, format, imageErr := image.Decode(bytes.NewReader(fileBytes))
-
-	// if imageErr != nil {
-	// 	fmt.Println("imageErr")
-	// 	return imageErr
-	// }
-
-	// filename := makeName()
-
-	// imagesToEncode := make([]*ImageData, 0)
-	// imagesToEncode = append(imagesToEncode, &ImageData{
-	// 	ImageData: &originalImage,
-	// 	FileName:  filename,
-	// 	Suffix:    "original",
-	// 	Format:    format,
-	// })
-
-	// thumb := makeThumbnail(&originalImage)
-
-	// imagesToEncode = append(imagesToEncode, &ImageData{
-	// 	ImageData: thumb,
-	// 	FileName:  filename,
-	// 	Suffix:    "thumb",
-	// 	Format:    format,
-	// })
-
-	// fmt.Println("image format: " + format)
 }
 
 func makeName() string {
 	return uuid.New().String()
 }
 
-func makeThumbnail(img *image.Image) *image.Image {
-	var thumb = resize.Thumbnail(128, 128, *img, resize.Lanczos3)
-	return &thumb
-}
-
-func resizeImage(img *image.Image, longestSide int) *image.Image {
-	width := (*img).Bounds().Max.X
-	height := (*img).Bounds().Max.Y
-
-	fmt.Printf("width: %v, height: %v\n", width, height)
-	return nil
-}
-
-func encodeJpegFile(imgData *ImageData, exifData ExifData, folderPath string) ([]byte, error) {
-	buf := new(bytes.Buffer)
-
-	// TODO set quality option or make it an environment variable
-	encodeErr := jpeg.Encode(buf, *imgData.ImageData, &jpeg.Options{
-		Quality: 75,
-	})
-
-	if encodeErr != nil {
-		return nil, encodeErr
-	}
-
-	// filePath := path.Join(folderPath, imgData.MakeFileName("jpg"))
-
-	// return writeFileData(filePath, buf.Bytes())
-
-	return buf.Bytes(), nil
-}
-
-func encodePngFile(imgData *ImageData, folderPath string) error {
-	enc := png.Encoder{
-		CompressionLevel: png.BestCompression,
-	}
-
-	buf := new(bytes.Buffer)
-
-	encodeErr := enc.Encode(buf, *imgData.ImageData)
+func writeFileData(folderPath string, imgData *imageWriteData) error {
+	filePath := path.Join(folderPath, imgData.MakeFileName())
+	bytes, encodeErr := (*imgData.ImageData).EncodeImage()
 
 	if encodeErr != nil {
 		return encodeErr
 	}
 
-	// filePath := path.Join(folderPath, imgData.MakeFileName("png"))
-
-	// return writeFileData(filePath, buf.Bytes())
-
-	return nil
-}
-
-func encodeTiffFile() {}
-func encodeGifFile()  {}
-func encodeBmpFile()  {}
-
-func writeFileData(filePath string, fileBytes []byte) error {
-	writeErr := os.WriteFile(filePath, fileBytes, 0644)
+	writeErr := os.WriteFile(filePath, bytes, 0644)
 
 	if writeErr != nil {
-		fmt.Println(writeErr.Error())
 		return writeErr
 	}
 
 	return nil
-}
-
-func makeNewImages(img *image.Image) []ImageData {
-	images := make([]ImageData, 0)
-
-	images = append(images, ImageData{
-		Suffix:    "thumb",
-		ImageData: makeThumbnail(img),
-	})
-
-	images = append(images, ImageData{
-		Suffix:    "web",
-		ImageData: resizeImage(img, 800),
-	})
-
-	return images
 }
 
 // The save functions need to do a few things:
@@ -186,139 +79,148 @@ func makeNewImages(img *image.Image) []ImageData {
 // * Get an *image.Image object
 // * Get the exif
 // Then we pass the above two points to the encode Jpeg function.
-func processHeifImage(imageBytes []byte) error {
-	// newBytes, err := ConvertHeifToJpg(imageBytes)
-
+func processNewHeifImage(imageBytes []byte) error {
 	reader := bytes.NewReader(imageBytes)
 	exif, err := goheif.ExtractExif(reader)
 	if err != nil {
 		return err
 	}
 
-	// path := path.Join("./files", "heif_exif.bin")
-	// os.WriteFile(path, exif, 0644)
-
 	image, err := goheif.Decode(reader)
 	if err != nil {
 		return err
 	}
 
-	newBytes, err := encodeJpegWithExif(
-		&ImageData{
-			ImageData: &image,
-			Suffix:    "fullsize",
-		}, ExifData{
+	jpegData := jpegData{
+		ImageData: &image,
+		ExifData: &exifData{
 			ExifData: exif,
 		},
-	)
+	}
 
-	path := path.Join("./files", "image.jpg")
-	writeFileData(path, newBytes)
+	newBytes, err := jpegData.EncodeImage()
 
 	if err != nil {
 		return err
 	}
 
-	return processJpegImage(newBytes)
+	return processNewJpegImage(newBytes)
 }
 
-func processJpegImage(imageBytes []byte) error {
-	originalImage, _, imageErr := image.Decode(bytes.NewReader(imageBytes))
+func processNewJpegImage(imageBytes []byte) error {
+	writeData := make([]*imageWriteData, 0)
+	filename := makeName()
+
+	imageData, imageErr := makeJpegData(imageBytes)
 
 	if imageErr != nil {
 		return imageErr
 	}
 
-	extractJpegExif(imageBytes)
+	writeData = append(writeData, makeJpegWriteData(imageData, filename, "original"))
+	writeData = append(writeData, makeJpegWriteData(makeThumbnailJpegData(imageData), filename, "thumb"))
 
-	makeNewImages(&originalImage)
-
-	// filename := makeName()
-
-	// path := path.Join("./files", filename+".jpg")
-	// writeErr := writeFileData(path, imageBytes)
-
-	// if writeErr != nil {
-	// 	return writeErr
-	// }
+	for _, w := range writeData {
+		writeErr := writeFileData("./files", w)
+		if writeErr != nil {
+			return writeErr
+		}
+	}
 
 	return nil
 }
 
-func extractJpegExif(imageBytes []byte) *ExifData {
-	if len(imageBytes) < 6 {
-		return nil
-	}
-
-	// Check for jpeg magic bytes
-	if imageBytes[0] != 0xff || imageBytes[1] != 0xd8 {
-		return nil
-	}
-
-	fmt.Println("Jpeg bytes exist!")
-
-	// Check for exif bytes
-	if imageBytes[2] != 0xff && imageBytes[3] != 0xe1 {
-		return nil
-	}
-
-	fmt.Println("exif bytes exist!")
-
-	lengthSlice := imageBytes[4:6]
-
-	length := int(binary.BigEndian.Uint16(lengthSlice))
-
-	fmt.Printf("jpeg exif reported length: %v\n", length)
-
-	start := 6
-	end := start + length - 2
-
-	if len(imageBytes) < end {
-		return nil
-	}
-	// We have to remove 2 to remove the length value
-	exif := imageBytes[start:end]
-
-	fmt.Printf("jpeg exif actual length: %v\n", len(exif))
-
-	path := path.Join("./files", "jpeg_exif.bin")
-	os.WriteFile(path, exif, 0644)
-
-	return &ExifData{
-		ExifData: exif,
-	}
-}
-
-func processPngImage(imageBytes []byte) error {
+func processNewPngImage(imageBytes []byte) error {
+	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
-	path := path.Join("./files", filename+".png")
-	return writeFileData(path, imageBytes)
+	imageData, imageErr := makePngData(imageBytes)
+
+	if imageErr != nil {
+		return imageErr
+	}
+
+	writeData = append(writeData, makePngWriteData(imageData, filename, "original"))
+	writeData = append(writeData, makePngWriteData(makeThumbnailPngData(imageData), filename, "thumb"))
+
+	for _, w := range writeData {
+		writeErr := writeFileData("./files", w)
+		if writeErr != nil {
+			return writeErr
+		}
+	}
+
+	return nil
 }
 
+// TODO provide the ability to convert from bmp to png or jpg
 func processGifImage(imageBytes []byte) error {
+	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
-	path := path.Join("./files", filename+".gif")
-	writeErr := writeFileData(path, imageBytes)
+	imageData, imageErr := makeGifData(imageBytes)
 
-	return writeErr
+	if imageErr != nil {
+		return imageErr
+	}
+
+	writeData = append(writeData, makeGifWriteData(imageData, filename, "original"))
+	writeData = append(writeData, makeGifWriteData(makeThumbnailGifData(imageData), filename, "thumb"))
+
+	for _, w := range writeData {
+		writeErr := writeFileData("./files", w)
+		if writeErr != nil {
+			return writeErr
+		}
+	}
+
+	return nil
 }
 
+// TODO provide the ability to convert from bmp to png or jpg
 func processBmpImage(imageBytes []byte) error {
+	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
-	path := path.Join("./files", filename+".bmp")
-	writeErr := writeFileData(path, imageBytes)
+	imageData, imageErr := makeBmpData(imageBytes)
 
-	return writeErr
+	if imageErr != nil {
+		return imageErr
+	}
+
+	writeData = append(writeData, makeBmpWriteData(imageData, filename, "original"))
+	writeData = append(writeData, makeBmpWriteData(makeThumbnailBmpData(imageData), filename, "thumb"))
+
+	for _, w := range writeData {
+		writeErr := writeFileData("./files", w)
+		if writeErr != nil {
+			return writeErr
+		}
+	}
+
+	return nil
 }
 
+// TODO compress tiff images to jpeg
 func processTiffImage(imageBytes []byte) error {
+	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
-	path := path.Join("./files", filename+".tiff")
-	writeErr := writeFileData(path, imageBytes)
+	imageData, imageErr := makeTiffData(imageBytes)
 
-	return writeErr
+	if imageErr != nil {
+		return imageErr
+	}
+
+	writeData = append(writeData, makeTiffWriteData(imageData, filename, "original"))
+	writeData = append(writeData, makeTiffWriteData(makeThumbnailTiffData(imageData), filename, "thumb"))
+
+	for _, w := range writeData {
+		writeErr := writeFileData("./files", w)
+		if writeErr != nil {
+			return writeErr
+		}
+	}
+
+	return nil
 }
