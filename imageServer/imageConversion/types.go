@@ -16,6 +16,9 @@ import (
 /****************************************************************************************
  * imageWriteData
 *****************************************************************************************/
+
+// imageWriteData is a bunch of meta information, plus image data for exporting
+// a new image file.
 type imageWriteData struct {
 	Name      string
 	Suffix    string
@@ -23,10 +26,12 @@ type imageWriteData struct {
 	ImageData *imageData
 }
 
+// Convenience function for exporting a consistent file name.
 func (iwd *imageWriteData) MakeFileName() string {
 	return iwd.Name + "@" + iwd.Suffix + "." + iwd.extension
 }
 
+// Convenience function for making an imageWriteData object with jpeg filled in
 func makeJpegWriteData(jpgData *jpegData, name string, suffix string) *imageWriteData {
 	var imgData imageData = jpgData
 
@@ -38,6 +43,7 @@ func makeJpegWriteData(jpgData *jpegData, name string, suffix string) *imageWrit
 	}
 }
 
+// Convenience function for making an imageWriteData object with png filled in
 func makePngWriteData(pData *pngData, name string, suffix string) *imageWriteData {
 	var imgData imageData = pData
 
@@ -49,6 +55,7 @@ func makePngWriteData(pData *pngData, name string, suffix string) *imageWriteDat
 	}
 }
 
+// Convenience function for making an imageWriteData object with gif filled in
 func makeGifWriteData(gData *gifData, name string, suffix string) *imageWriteData {
 	var imgData imageData = gData
 
@@ -60,6 +67,7 @@ func makeGifWriteData(gData *gifData, name string, suffix string) *imageWriteDat
 	}
 }
 
+// Convenience function for making an imageWriteData object with bmp filled in
 func makeBmpWriteData(bData *bmpData, name string, suffix string) *imageWriteData {
 	var imgData imageData = bData
 
@@ -71,6 +79,7 @@ func makeBmpWriteData(bData *bmpData, name string, suffix string) *imageWriteDat
 	}
 }
 
+// Convenience function for making an imageWriteData object with tiff filled in
 func makeTiffWriteData(tData *tiffData, name string, suffix string) *imageWriteData {
 	var imgData imageData = tData
 
@@ -85,10 +94,14 @@ func makeTiffWriteData(tData *tiffData, name string, suffix string) *imageWriteD
 /****************************************************************************************
  * exifData
 *****************************************************************************************/
+
+// Representation of EXIF data, plus convenience functions for generating data
+// needed for encoding jpeg info.
 type exifData struct {
 	ExifData []byte
 }
 
+// Generates APP1 Marker bytes and File sizes.
 func (exif *exifData) makeSizeData() []byte {
 	markerlen := 2 + len(exif.ExifData)
 
@@ -97,11 +110,13 @@ func (exif *exifData) makeSizeData() []byte {
 	sizeByte1 := uint8(markerlen >> 8)
 	sizeByte2 := uint8(markerlen & 0xff)
 
+	// FF E1 are the first two bytes for the exif Marker
 	exifMarker := []byte{0xff, 0xe1, sizeByte1, sizeByte2}
 
 	return exifMarker
 }
 
+// Generates the marker, file size and appends the exif data.
 func (exif *exifData) makeFileData() []byte {
 	data := exif.makeSizeData()
 	data = append(data, exif.ExifData...)
@@ -126,6 +141,8 @@ type jpegData struct {
 	OriginalData []byte
 }
 
+// When encoding, if original data is included, we'll just return that with no further
+// processing or encoding. If originalData is not included, we encode the ImageData
 func (jd *jpegData) EncodeImage() ([]byte, error) {
 	if jd.OriginalData != nil {
 		return jd.OriginalData, nil
@@ -153,6 +170,9 @@ func (jd *jpegData) EncodeImage() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+// Convenience function that takes jpeg file bytes, extract exif data and decodes the
+// image file. This function also returns the original image data. We don't worry about
+// performing any image resizes yet.
 func makeJpegData(imageBytes []byte) (*jpegData, error) {
 	exifData := extractJpegExif(imageBytes)
 
@@ -169,6 +189,8 @@ func makeJpegData(imageBytes []byte) (*jpegData, error) {
 	}, nil
 }
 
+// Replaces the imageData with a resized version of the image data. Makes a new jpegData
+// object, discards the original bytes
 func makeScaledJpegData(jData *jpegData, longestSide uint) *jpegData {
 	newImage := scaleImage(jData.ImageData, longestSide)
 
@@ -178,6 +200,8 @@ func makeScaledJpegData(jData *jpegData, longestSide uint) *jpegData {
 	}
 }
 
+// Replaces the imageData with a resized version of the image data. Makes a new jpegData
+// object, discards the original bytes
 func makeThumbnailJpegData(jData *jpegData) *jpegData {
 	newImage := makeThumbnail(jData.ImageData)
 

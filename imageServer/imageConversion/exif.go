@@ -41,6 +41,8 @@ func (w *writerSkipper) Write(data []byte) (int, error) {
 	}
 }
 
+// Makes a new writerSkipper with the exif data defined. Inserts the exif data
+// into the buffer, then returns the writer.
 func newWriterExif(writer io.Writer, exif *exifData) (io.Writer, error) {
 	writerSkipper := &writerSkipper{writer, 2}
 
@@ -62,6 +64,8 @@ func newWriterExif(writer io.Writer, exif *exifData) (io.Writer, error) {
 	return writerSkipper, nil
 }
 
+// TODO find jpeg beinging bytes or EXIF end bytes
+// FF C0 or something like that
 func extractJpegExif(imageBytes []byte) *exifData {
 	bytesLength := len(imageBytes)
 	if bytesLength < 2 {
