@@ -14,11 +14,11 @@ import (
 	"github.com/jdeng/goheif"
 )
 
-func SaveImageFile(ctx *gin.Context) error {
+func ProcessImageFile(ctx *gin.Context) (*ImageOutputData, error) {
 	file, fileHandler, fileErr := ctx.Request.FormFile("image")
 
 	if fileErr != nil {
-		return fileErr
+		return nil, fileErr
 	}
 	defer file.Close()
 
@@ -27,7 +27,7 @@ func SaveImageFile(ctx *gin.Context) error {
 	fileBytes, fileBytesErr := ioutil.ReadAll(file)
 
 	if fileBytesErr != nil {
-		return fileBytesErr
+		return nil, fileBytesErr
 	}
 
 	switch contentType {
@@ -38,21 +38,52 @@ func SaveImageFile(ctx *gin.Context) error {
 	case "image/png":
 		return processNewPngImage(fileBytes)
 	case "image/gif":
-		return processGifImage(fileBytes)
+		return processNewGifImage(fileBytes)
 	case "image/bmp":
-		return processBmpImage(fileBytes)
+		return processNewBmpImage(fileBytes)
 	case "image/tiff":
-		return processTiffImage(fileBytes)
+		return processNewTiffImage(fileBytes)
 	default:
-		return errors.New("invalid image format")
+		return nil, errors.New("invalid image format")
 	}
 }
 
+// Returns a string to be used as a file name. Currently just uses UUID
 func makeName() string {
 	return uuid.New().String()
 }
 
-func writeFileData(folderPath string, imgData *imageWriteData) error {
+// Takes a slice of imageWriteData objects and sends each one to the writeFileData
+// function. If a write error occurs, the process is halted and an error is thrown
+func writeFiles(writeData []*imageWriteData) error {
+	var err error
+	for _, w := range writeData {
+		writeErr := writeFileData(w)
+		if writeErr != nil {
+			err = writeErr
+		}
+	}
+
+	if err != nil {
+		rollBackWrites(writeData)
+		return err
+	}
+
+	return nil
+}
+
+// writeFileData takes the imgWriteData object, gets an image path, creates the
+// image path, if it doesn't exist, encodes the image and then writes the resultant
+// bytes to the file system. Write errors are returned
+func writeFileData(imgData *imageWriteData) error {
+	folderPath := GetImagePath(imgData.Name)
+
+	folderErr := CheckOrCreateImageFolder(folderPath)
+
+	if folderErr != nil {
+		return folderErr
+	}
+
 	filePath := path.Join(folderPath, imgData.MakeFileName())
 	bytes, encodeErr := (*imgData.ImageData).EncodeImage()
 
@@ -60,13 +91,38 @@ func writeFileData(folderPath string, imgData *imageWriteData) error {
 		return encodeErr
 	}
 
-	writeErr := os.WriteFile(filePath, bytes, 0644)
+	return os.WriteFile(filePath, bytes, 0644)
+}
 
-	if writeErr != nil {
-		return writeErr
+// Attempts to roll back any writes that already occurred in the case of an error
+func rollBackWrites(writeData []*imageWriteData) {
+	for _, w := range writeData {
+		folderPath := GetImagePath(w.Name)
+		filePath := path.Join(folderPath, w.MakeFileName())
+
+		deleteFile(filePath)
+	}
+}
+
+// Simple file deletion function.
+func deleteFile(filePath string) error {
+	return os.Remove(filePath)
+}
+
+// The commonFileProcess generates the ImageOutputData object from the elements
+// generated in each process function. This will be the data that we eventually
+// save to our database.
+func commonFileProcess(writeData []*imageWriteData, filename, extension string) *ImageOutputData {
+	suffixes := make([]string, 0)
+	for _, el := range writeData {
+		suffixes = append(suffixes, el.Suffix)
 	}
 
-	return nil
+	return &ImageOutputData{
+		Name:      filename,
+		Suffixes:  suffixes,
+		Extension: extension,
+	}
 }
 
 // The save functions need to do a few things:
@@ -79,16 +135,16 @@ func writeFileData(folderPath string, imgData *imageWriteData) error {
 // * Get an *image.Image object
 // * Get the exif
 // Then we pass the above two points to the encode Jpeg function.
-func processNewHeifImage(imageBytes []byte) error {
+func processNewHeifImage(imageBytes []byte) (*ImageOutputData, error) {
 	reader := bytes.NewReader(imageBytes)
 	exif, err := goheif.ExtractExif(reader)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	image, err := goheif.Decode(reader)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	jpegData := jpegData{
@@ -101,126 +157,131 @@ func processNewHeifImage(imageBytes []byte) error {
 	newBytes, err := jpegData.EncodeImage()
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	return processNewJpegImage(newBytes)
 }
 
-func processNewJpegImage(imageBytes []byte) error {
+func processNewJpegImage(imageBytes []byte) (*ImageOutputData, error) {
 	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
 	imageData, imageErr := makeJpegData(imageBytes)
 
 	if imageErr != nil {
-		return imageErr
+		return nil, imageErr
 	}
 
 	writeData = append(writeData, makeJpegWriteData(imageData, filename, "original"))
 	writeData = append(writeData, makeJpegWriteData(makeThumbnailJpegData(imageData), filename, "thumb"))
 
-	for _, w := range writeData {
-		writeErr := writeFileData("./files", w)
-		if writeErr != nil {
-			return writeErr
-		}
+	outputData := commonFileProcess(writeData, filename, "jpg")
+
+	writeErr := writeFiles(writeData)
+
+	if writeErr != nil {
+		return nil, writeErr
 	}
 
-	return nil
+	return outputData, nil
 }
 
-func processNewPngImage(imageBytes []byte) error {
+func processNewPngImage(imageBytes []byte) (*ImageOutputData, error) {
 	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
 	imageData, imageErr := makePngData(imageBytes)
 
 	if imageErr != nil {
-		return imageErr
+		return nil, imageErr
 	}
 
 	writeData = append(writeData, makePngWriteData(imageData, filename, "original"))
 	writeData = append(writeData, makePngWriteData(makeThumbnailPngData(imageData), filename, "thumb"))
 
-	for _, w := range writeData {
-		writeErr := writeFileData("./files", w)
-		if writeErr != nil {
-			return writeErr
-		}
+	outputData := commonFileProcess(writeData, filename, "png")
+
+	writeErr := writeFiles(writeData)
+
+	if writeErr != nil {
+		return nil, writeErr
 	}
 
-	return nil
+	return outputData, nil
 }
 
 // TODO provide the ability to convert from bmp to png or jpg
-func processGifImage(imageBytes []byte) error {
+func processNewGifImage(imageBytes []byte) (*ImageOutputData, error) {
 	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
 	imageData, imageErr := makeGifData(imageBytes)
 
 	if imageErr != nil {
-		return imageErr
+		return nil, imageErr
 	}
 
 	writeData = append(writeData, makeGifWriteData(imageData, filename, "original"))
 	writeData = append(writeData, makeGifWriteData(makeThumbnailGifData(imageData), filename, "thumb"))
 
-	for _, w := range writeData {
-		writeErr := writeFileData("./files", w)
-		if writeErr != nil {
-			return writeErr
-		}
+	outputData := commonFileProcess(writeData, filename, "gif")
+
+	writeErr := writeFiles(writeData)
+
+	if writeErr != nil {
+		return nil, writeErr
 	}
 
-	return nil
+	return outputData, nil
 }
 
 // TODO provide the ability to convert from bmp to png or jpg
-func processBmpImage(imageBytes []byte) error {
+func processNewBmpImage(imageBytes []byte) (*ImageOutputData, error) {
 	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
 	imageData, imageErr := makeBmpData(imageBytes)
 
 	if imageErr != nil {
-		return imageErr
+		return nil, imageErr
 	}
 
 	writeData = append(writeData, makeBmpWriteData(imageData, filename, "original"))
 	writeData = append(writeData, makeBmpWriteData(makeThumbnailBmpData(imageData), filename, "thumb"))
 
-	for _, w := range writeData {
-		writeErr := writeFileData("./files", w)
-		if writeErr != nil {
-			return writeErr
-		}
+	outputData := commonFileProcess(writeData, filename, "bmp")
+
+	writeErr := writeFiles(writeData)
+
+	if writeErr != nil {
+		return nil, writeErr
 	}
 
-	return nil
+	return outputData, nil
 }
 
 // TODO compress tiff images to jpeg
-func processTiffImage(imageBytes []byte) error {
+func processNewTiffImage(imageBytes []byte) (*ImageOutputData, error) {
 	writeData := make([]*imageWriteData, 0)
 	filename := makeName()
 
 	imageData, imageErr := makeTiffData(imageBytes)
 
 	if imageErr != nil {
-		return imageErr
+		return nil, imageErr
 	}
 
 	writeData = append(writeData, makeTiffWriteData(imageData, filename, "original"))
 	writeData = append(writeData, makeTiffWriteData(makeThumbnailTiffData(imageData), filename, "thumb"))
 
-	for _, w := range writeData {
-		writeErr := writeFileData("./files", w)
-		if writeErr != nil {
-			return writeErr
-		}
+	outputData := commonFileProcess(writeData, filename, "tiff")
+
+	writeErr := writeFiles(writeData)
+
+	if writeErr != nil {
+		return nil, writeErr
 	}
 
-	return nil
+	return outputData, nil
 }

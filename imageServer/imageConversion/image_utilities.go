@@ -3,8 +3,11 @@ package imageConversion
 import (
 	"image"
 	"math"
+	"os"
+	"strconv"
 
 	"github.com/nfnt/resize"
+	"methompson.com/image-microservice/imageServer/constants"
 )
 
 func scaleImage(img *image.Image, longestSide uint) *image.Image {
@@ -51,4 +54,18 @@ func calculateShorterDimension(side1, side2, newLongSide float64) uint {
 func makeThumbnail(img *image.Image) *image.Image {
 	var thumb = resize.Thumbnail(128, 128, *img, resize.Lanczos3)
 	return &thumb
+}
+
+// Gets jpeg quality as an integer. Retrieves the value from the env
+// and if it doesn't exist or the value is erroneous, returns 75 as
+// a default
+func getJpegQuality() int {
+	val, err := strconv.Atoi(os.Getenv(constants.JPEG_QUALITY))
+
+	if err != nil || val < 1 || val > 100 {
+		return 75
+	}
+
+	return val
+
 }

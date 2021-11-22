@@ -14,6 +14,18 @@ import (
 )
 
 /****************************************************************************************
+ * ImageOutputData
+*****************************************************************************************/
+
+// The eventual data object that communicates the result of having written files to the
+// filesystem. It provides information, like, name, extension and suffixes
+type ImageOutputData struct {
+	Name      string
+	Suffixes  []string
+	Extension string
+}
+
+/****************************************************************************************
  * imageWriteData
 *****************************************************************************************/
 
@@ -127,6 +139,9 @@ func (exif *exifData) makeFileData() []byte {
 /****************************************************************************************
  * imageData
 *****************************************************************************************/
+// Interface for representing image data for conversion. Should be overriden for each
+// file format. Each overriden child class needs to contain whatever data is required
+// to make EncodeImage with the below signature work.
 type imageData interface {
 	// EncodeImage converts the image data into the bytes for an image file
 	EncodeImage() ([]byte, error)
@@ -160,7 +175,7 @@ func (jd *jpegData) EncodeImage() ([]byte, error) {
 	}
 
 	encodeErr := jpeg.Encode(writer, *jd.ImageData, &jpeg.Options{
-		Quality: 75,
+		Quality: getJpegQuality(),
 	})
 
 	if encodeErr != nil {

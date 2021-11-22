@@ -71,7 +71,6 @@ func (srv *ImageServer) GetImagesByPage(ctx *gin.Context) {
 
 // POST /add-image
 // Adding an Image to the server. It accomplishes the task as follows:
-// * Checks the user's authentication
 // * Parses the metadata from the form body
 // * Retrieves the image information from the form body
 // * Performs any image conversions, including generating a thumbnail

@@ -27,7 +27,11 @@ func (ic *ImageController) AddLogger(logger *logging.ImageLogger) {
 }
 
 func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
-	imageConversion.SaveImageFile(ctx)
+	_, conversionErr := imageConversion.ProcessImageFile(ctx)
+
+	if conversionErr != nil {
+		return conversionErr
+	}
 
 	return nil
 }

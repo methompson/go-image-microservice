@@ -40,3 +40,6 @@ image-microservice
 image-microservice.tar
 
 firebase.json
+
+# The test images folder
+files/
