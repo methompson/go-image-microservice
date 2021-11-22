@@ -6,134 +6,96 @@ import (
 	gif "image/gif"
 	jpeg "image/jpeg"
 	png "image/png"
+	"io"
 
 	bmp "golang.org/x/image/bmp"
 	tiff "golang.org/x/image/tiff"
-
-	"io"
+	"methompson.com/image-microservice/imageServer/dbController"
 )
 
 /****************************************************************************************
  * ImageOutputData
 *****************************************************************************************/
 
-// The eventual data object that communicates the result of having written files to the
-// filesystem. It provides information, like, name, extension and suffixes
+// The eventual data struct that communicates the result of having written files to the
+// filesystem. It provides information, like, name, extension and size formats
 type ImageOutputData struct {
-	Name      string
-	Suffixes  []string
-	Extension string
-}
-
-/****************************************************************************************
- * imageWriteData
-*****************************************************************************************/
-
-// imageWriteData is a bunch of meta information, plus image data for exporting
-// a new image file.
-type imageWriteData struct {
-	Name      string
-	Suffix    string
-	extension string
-	ImageData *imageData
+	Name        string
+	SizeFormats []*dbController.ImageSizeFormat
+	Extension   string
 }
 
 // Convenience function for exporting a consistent file name.
-func (iwd *imageWriteData) MakeFileName() string {
-	return iwd.Name + "@" + iwd.Suffix + "." + iwd.extension
+func (iod *ImageOutputData) MakeFileName(suffix string) string {
+	return iod.Name + "@" + suffix + "." + iod.Extension
 }
 
-// Convenience function for making an imageWriteData object with jpeg filled in
-func makeJpegWriteData(jpgData *jpegData, name string, suffix string) *imageWriteData {
-	var imgData imageData = jpgData
-
-	return &imageWriteData{
-		Name:      name,
-		Suffix:    suffix,
-		extension: "jpg",
-		ImageData: &imgData,
-	}
+func (iod *ImageOutputData) AddSizeFormat(sf *dbController.ImageSizeFormat) {
+	iod.SizeFormats = append(iod.SizeFormats, sf)
 }
 
-// Convenience function for making an imageWriteData object with png filled in
-func makePngWriteData(pData *pngData, name string, suffix string) *imageWriteData {
-	var imgData imageData = pData
-
-	return &imageWriteData{
-		Name:      name,
-		Suffix:    suffix,
-		extension: "png",
-		ImageData: &imgData,
-	}
-}
-
-// Convenience function for making an imageWriteData object with gif filled in
-func makeGifWriteData(gData *gifData, name string, suffix string) *imageWriteData {
-	var imgData imageData = gData
-
-	return &imageWriteData{
-		Name:      name,
-		Suffix:    suffix,
-		extension: "gif",
-		ImageData: &imgData,
-	}
-}
-
-// Convenience function for making an imageWriteData object with bmp filled in
-func makeBmpWriteData(bData *bmpData, name string, suffix string) *imageWriteData {
-	var imgData imageData = bData
-
-	return &imageWriteData{
-		Name:      name,
-		Suffix:    suffix,
-		extension: "bmp",
-		ImageData: &imgData,
-	}
-}
-
-// Convenience function for making an imageWriteData object with tiff filled in
-func makeTiffWriteData(tData *tiffData, name string, suffix string) *imageWriteData {
-	var imgData imageData = tData
-
-	return &imageWriteData{
-		Name:      name,
-		Suffix:    suffix,
-		extension: "tiff",
-		ImageData: &imgData,
+func makeImageOutputData(bundle *imageBundle) *ImageOutputData {
+	return &ImageOutputData{
+		Name:        bundle.Name,
+		Extension:   bundle.Extension,
+		SizeFormats: make([]*dbController.ImageSizeFormat, 0),
 	}
 }
 
 /****************************************************************************************
- * exifData
+ * imageBundle
 *****************************************************************************************/
 
-// Representation of EXIF data, plus convenience functions for generating data
-// needed for encoding jpeg info.
-type exifData struct {
-	ExifData []byte
+// imageBundle is a bunch of meta information, plus image data for exporting
+// a new image file.
+type imageBundle struct {
+	Name      string
+	Extension string
+	imageData []*imageData
 }
 
-// Generates APP1 Marker bytes and File sizes.
-func (exif *exifData) makeSizeData() []byte {
-	markerlen := 2 + len(exif.ExifData)
-
-	// The size of the marker is represented as 2 bytes, so we have to convert the
-	// length into two bytes to place into the exif marker
-	sizeByte1 := uint8(markerlen >> 8)
-	sizeByte2 := uint8(markerlen & 0xff)
-
-	// FF E1 are the first two bytes for the exif Marker
-	exifMarker := []byte{0xff, 0xe1, sizeByte1, sizeByte2}
-
-	return exifMarker
+// Convenience function for exporting a consistent file name.
+func (iwd *imageBundle) MakeFileName(suffix string) string {
+	return iwd.Name + "@" + suffix + "." + iwd.Extension
 }
 
-// Generates the marker, file size and appends the exif data.
-func (exif *exifData) makeFileData() []byte {
-	data := exif.makeSizeData()
-	data = append(data, exif.ExifData...)
+// Creates a new imageWriteDataSize struct and appends it to the writeData slice
+func (iwd *imageBundle) addNewSize(dat *imageData) {
+	iwd.imageData = append(iwd.imageData, dat)
+}
 
-	return data
+// Helper function for creating a new imageBundle struct
+func makeWriteData(name, extension string) *imageBundle {
+	return &imageBundle{
+		Name:      name,
+		Extension: extension,
+		imageData: make([]*imageData, 0),
+	}
+}
+
+// Convenience function for making an imageWriteData struct with jpeg filled in
+func makeJpegBundle(name string) *imageBundle {
+	return makeWriteData(name, "jpg")
+}
+
+// Convenience function for making an imageWriteData struct with png filled in
+func makePngBundle(name string) *imageBundle {
+	return makeWriteData(name, "png")
+}
+
+// Convenience function for making an imageWriteData struct with gif filled in
+func makeGifBundle(name string) *imageBundle {
+	return makeWriteData(name, "gif")
+}
+
+// Convenience function for making an imageWriteData struct with bmp filled in
+func makeBmpBundle(name string) *imageBundle {
+	return makeWriteData(name, "bmp")
+}
+
+// Convenience function for making an imageWriteData struct with tiff filled in
+func makeTiffBundle(name string) *imageBundle {
+	return makeWriteData(name, "tiff")
 }
 
 /****************************************************************************************
@@ -145,12 +107,25 @@ func (exif *exifData) makeFileData() []byte {
 type imageData interface {
 	// EncodeImage converts the image data into the bytes for an image file
 	EncodeImage() ([]byte, error)
+	GetImageSize() *dbController.ImageSize
+	GetSuffix() string
+	GetImageData() *image.Image
+}
+
+func getBounds(img *image.Image) *dbController.ImageSize {
+	bounds := (*img).Bounds()
+
+	return &dbController.ImageSize{
+		Width:  bounds.Max.X,
+		Height: bounds.Max.Y,
+	}
 }
 
 /****************************************************************************************
  * jpegData
 *****************************************************************************************/
 type jpegData struct {
+	Suffix       string
 	ExifData     *exifData
 	ImageData    *image.Image
 	OriginalData []byte
@@ -158,9 +133,9 @@ type jpegData struct {
 
 // When encoding, if original data is included, we'll just return that with no further
 // processing or encoding. If originalData is not included, we encode the ImageData
-func (jd *jpegData) EncodeImage() ([]byte, error) {
-	if jd.OriginalData != nil {
-		return jd.OriginalData, nil
+func (dat *jpegData) EncodeImage() ([]byte, error) {
+	if dat.OriginalData != nil {
+		return dat.OriginalData, nil
 	}
 
 	var writer io.Writer
@@ -168,13 +143,13 @@ func (jd *jpegData) EncodeImage() ([]byte, error) {
 
 	// if exif data exists, we'll make an exif writer to encode the jpeg file
 	// with the exif data. Otherwise, we'll just use the buffer
-	if jd.ExifData != nil {
-		writer, _ = newWriterExif(buffer, jd.ExifData)
+	if dat.ExifData != nil {
+		writer, _ = newWriterExif(buffer, dat.ExifData)
 	} else {
 		writer = buffer
 	}
 
-	encodeErr := jpeg.Encode(writer, *jd.ImageData, &jpeg.Options{
+	encodeErr := jpeg.Encode(writer, *dat.ImageData, &jpeg.Options{
 		Quality: getJpegQuality(),
 	})
 
@@ -185,10 +160,27 @@ func (jd *jpegData) EncodeImage() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (dat *jpegData) GetImageSize() *dbController.ImageSize {
+	return getBounds(dat.ImageData)
+}
+
+func (dat *jpegData) GetSuffix() string {
+	return dat.Suffix
+}
+
+func (dat *jpegData) GetImageData() *image.Image {
+	return dat.ImageData
+}
+
+func (dat *jpegData) AsImageData() *imageData {
+	var imgData imageData = dat
+	return &imgData
+}
+
 // Convenience function that takes jpeg file bytes, extract exif data and decodes the
 // image file. This function also returns the original image data. We don't worry about
 // performing any image resizes yet.
-func makeJpegData(imageBytes []byte) (*jpegData, error) {
+func makeJpegData(imageBytes []byte, suffix string) (*jpegData, error) {
 	exifData := extractJpegExif(imageBytes)
 
 	originalImage, _, imageErr := image.Decode(bytes.NewReader(imageBytes))
@@ -198,6 +190,7 @@ func makeJpegData(imageBytes []byte) (*jpegData, error) {
 	}
 
 	return &jpegData{
+		Suffix:       suffix,
 		ImageData:    &originalImage,
 		ExifData:     exifData,
 		OriginalData: imageBytes,
@@ -205,24 +198,26 @@ func makeJpegData(imageBytes []byte) (*jpegData, error) {
 }
 
 // Replaces the imageData with a resized version of the image data. Makes a new jpegData
-// object, discards the original bytes
-func makeScaledJpegData(jData *jpegData, longestSide uint) *jpegData {
-	newImage := scaleImage(jData.ImageData, longestSide)
+// struct, discards the original bytes
+func makeScaledJpegData(iData *jpegData, longestSide uint, suffix string) *jpegData {
+	newImage := scaleImage(iData.ImageData, longestSide)
 
 	return &jpegData{
+		Suffix:    suffix,
 		ImageData: newImage,
-		ExifData:  jData.ExifData,
+		ExifData:  iData.ExifData,
 	}
 }
 
 // Replaces the imageData with a resized version of the image data. Makes a new jpegData
-// object, discards the original bytes
-func makeThumbnailJpegData(jData *jpegData) *jpegData {
-	newImage := makeThumbnail(jData.ImageData)
+// struct, discards the original bytes
+func makeThumbnailJpegData(iData *jpegData, suffix string) *jpegData {
+	newImage := makeThumbnail(iData.ImageData)
 
 	return &jpegData{
+		Suffix:    suffix,
 		ImageData: newImage,
-		ExifData:  jData.ExifData,
+		ExifData:  iData.ExifData,
 	}
 }
 
@@ -230,13 +225,14 @@ func makeThumbnailJpegData(jData *jpegData) *jpegData {
  * pngData
 *****************************************************************************************/
 type pngData struct {
+	Suffix       string
 	ImageData    *image.Image
 	OriginalData []byte
 }
 
-func (pd *pngData) EncodeImage() ([]byte, error) {
-	if pd.OriginalData != nil {
-		return pd.OriginalData, nil
+func (dat *pngData) EncodeImage() ([]byte, error) {
+	if dat.OriginalData != nil {
+		return dat.OriginalData, nil
 	}
 
 	enc := png.Encoder{
@@ -245,7 +241,7 @@ func (pd *pngData) EncodeImage() ([]byte, error) {
 
 	buffer := new(bytes.Buffer)
 
-	encodeErr := enc.Encode(buffer, *pd.ImageData)
+	encodeErr := enc.Encode(buffer, *dat.ImageData)
 
 	if encodeErr != nil {
 		return nil, encodeErr
@@ -254,7 +250,24 @@ func (pd *pngData) EncodeImage() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func makePngData(imageBytes []byte) (*pngData, error) {
+func (dat *pngData) GetImageSize() *dbController.ImageSize {
+	return getBounds(dat.ImageData)
+}
+
+func (dat *pngData) GetSuffix() string {
+	return dat.Suffix
+}
+
+func (dat *pngData) GetImageData() *image.Image {
+	return dat.ImageData
+}
+
+func (dat *pngData) AsImageData() *imageData {
+	var imgData imageData = dat
+	return &imgData
+}
+
+func makePngData(imageBytes []byte, suffix string) (*pngData, error) {
 	originalImage, _, imageErr := image.Decode(bytes.NewReader(imageBytes))
 
 	if imageErr != nil {
@@ -262,23 +275,26 @@ func makePngData(imageBytes []byte) (*pngData, error) {
 	}
 
 	return &pngData{
+		Suffix:       suffix,
 		ImageData:    &originalImage,
 		OriginalData: imageBytes,
 	}, nil
 }
 
-func makeScaledPngData(pData *pngData, longestSide uint) *pngData {
-	newImage := scaleImage(pData.ImageData, longestSide)
+func makeScaledPngData(iData *pngData, longestSide uint, suffix string) *pngData {
+	newImage := scaleImage(iData.ImageData, longestSide)
 
 	return &pngData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }
 
-func makeThumbnailPngData(pData *pngData) *pngData {
-	newImage := makeThumbnail(pData.ImageData)
+func makeThumbnailPngData(iData *pngData, suffix string) *pngData {
+	newImage := makeThumbnail(iData.ImageData)
 
 	return &pngData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }
@@ -287,18 +303,19 @@ func makeThumbnailPngData(pData *pngData) *pngData {
  * gifData
 *****************************************************************************************/
 type gifData struct {
+	Suffix       string
 	ImageData    *image.Image
 	OriginalData []byte
 }
 
-func (gd *gifData) EncodeImage() ([]byte, error) {
-	if gd.OriginalData != nil {
-		return gd.OriginalData, nil
+func (dat *gifData) EncodeImage() ([]byte, error) {
+	if dat.OriginalData != nil {
+		return dat.OriginalData, nil
 	}
 
 	buffer := new(bytes.Buffer)
 
-	encodeErr := gif.Encode(buffer, *gd.ImageData, nil)
+	encodeErr := gif.Encode(buffer, *dat.ImageData, nil)
 
 	if encodeErr != nil {
 		return nil, encodeErr
@@ -307,7 +324,24 @@ func (gd *gifData) EncodeImage() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func makeGifData(imageBytes []byte) (*gifData, error) {
+func (dat *gifData) GetImageSize() *dbController.ImageSize {
+	return getBounds(dat.ImageData)
+}
+
+func (dat *gifData) GetSuffix() string {
+	return dat.Suffix
+}
+
+func (dat *gifData) GetImageData() *image.Image {
+	return dat.ImageData
+}
+
+func (dat *gifData) AsImageData() *imageData {
+	var imgData imageData = dat
+	return &imgData
+}
+
+func makeGifData(imageBytes []byte, suffix string) (*gifData, error) {
 	originalImage, _, imageErr := image.Decode(bytes.NewReader(imageBytes))
 
 	if imageErr != nil {
@@ -315,23 +349,26 @@ func makeGifData(imageBytes []byte) (*gifData, error) {
 	}
 
 	return &gifData{
+		Suffix:       suffix,
 		ImageData:    &originalImage,
 		OriginalData: imageBytes,
 	}, nil
 }
 
-func makeScaledGifData(gData *gifData, longestSide uint) *gifData {
-	newImage := scaleImage(gData.ImageData, longestSide)
+func makeScaledGifData(iData *gifData, longestSide uint, suffix string) *gifData {
+	newImage := scaleImage(iData.ImageData, longestSide)
 
 	return &gifData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }
 
-func makeThumbnailGifData(gData *gifData) *gifData {
-	newImage := makeThumbnail(gData.ImageData)
+func makeThumbnailGifData(iData *gifData, suffix string) *gifData {
+	newImage := makeThumbnail(iData.ImageData)
 
 	return &gifData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }
@@ -340,18 +377,19 @@ func makeThumbnailGifData(gData *gifData) *gifData {
  * bmpData
 *****************************************************************************************/
 type bmpData struct {
+	Suffix       string
 	ImageData    *image.Image
 	OriginalData []byte
 }
 
-func (bd *bmpData) EncodeImage() ([]byte, error) {
-	if bd.OriginalData != nil {
-		return bd.OriginalData, nil
+func (dat *bmpData) EncodeImage() ([]byte, error) {
+	if dat.OriginalData != nil {
+		return dat.OriginalData, nil
 	}
 
 	buffer := new(bytes.Buffer)
 
-	encodeErr := bmp.Encode(buffer, *bd.ImageData)
+	encodeErr := bmp.Encode(buffer, *dat.ImageData)
 
 	if encodeErr != nil {
 		return nil, encodeErr
@@ -360,7 +398,24 @@ func (bd *bmpData) EncodeImage() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func makeBmpData(imageBytes []byte) (*bmpData, error) {
+func (dat *bmpData) GetImageSize() *dbController.ImageSize {
+	return getBounds(dat.ImageData)
+}
+
+func (dat *bmpData) GetSuffix() string {
+	return dat.Suffix
+}
+
+func (dat *bmpData) GetImageData() *image.Image {
+	return dat.ImageData
+}
+
+func (dat *bmpData) AsImageData() *imageData {
+	var imgData imageData = dat
+	return &imgData
+}
+
+func makeBmpData(imageBytes []byte, suffix string) (*bmpData, error) {
 	originalImage, _, imageErr := image.Decode(bytes.NewReader(imageBytes))
 
 	if imageErr != nil {
@@ -368,23 +423,26 @@ func makeBmpData(imageBytes []byte) (*bmpData, error) {
 	}
 
 	return &bmpData{
+		Suffix:       suffix,
 		ImageData:    &originalImage,
 		OriginalData: imageBytes,
 	}, nil
 }
 
-func makeScaledBmpData(iData *bmpData, longestSide uint) *bmpData {
+func makeScaledBmpData(iData *bmpData, longestSide uint, suffix string) *bmpData {
 	newImage := scaleImage(iData.ImageData, longestSide)
 
 	return &bmpData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }
 
-func makeThumbnailBmpData(iData *bmpData) *bmpData {
+func makeThumbnailBmpData(iData *bmpData, suffix string) *bmpData {
 	newImage := makeThumbnail(iData.ImageData)
 
 	return &bmpData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }
@@ -393,19 +451,20 @@ func makeThumbnailBmpData(iData *bmpData) *bmpData {
  * tiffData
 *****************************************************************************************/
 type tiffData struct {
+	Suffix       string
 	ImageData    *image.Image
 	OriginalData []byte
 }
 
-func (td *tiffData) EncodeImage() ([]byte, error) {
-	if td.OriginalData != nil {
-		return td.OriginalData, nil
+func (dat *tiffData) EncodeImage() ([]byte, error) {
+	if dat.OriginalData != nil {
+		return dat.OriginalData, nil
 	}
 
 	buffer := new(bytes.Buffer)
 
 	// encodeErr := tiff.Encode(buffer, *td.ImageData, nil)
-	encodeErr := tiff.Encode(buffer, *td.ImageData, &tiff.Options{
+	encodeErr := tiff.Encode(buffer, *dat.ImageData, &tiff.Options{
 		Compression: tiff.Deflate,
 	})
 
@@ -416,7 +475,24 @@ func (td *tiffData) EncodeImage() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func makeTiffData(imageBytes []byte) (*tiffData, error) {
+func (dat *tiffData) GetImageSize() *dbController.ImageSize {
+	return getBounds(dat.ImageData)
+}
+
+func (dat *tiffData) GetSuffix() string {
+	return dat.Suffix
+}
+
+func (dat *tiffData) GetImageData() *image.Image {
+	return dat.ImageData
+}
+
+func (dat *tiffData) AsImageData() *imageData {
+	var imgData imageData = dat
+	return &imgData
+}
+
+func makeTiffData(imageBytes []byte, suffix string) (*tiffData, error) {
 	originalImage, _, imageErr := image.Decode(bytes.NewReader(imageBytes))
 
 	if imageErr != nil {
@@ -424,23 +500,26 @@ func makeTiffData(imageBytes []byte) (*tiffData, error) {
 	}
 
 	return &tiffData{
+		Suffix:       suffix,
 		ImageData:    &originalImage,
 		OriginalData: imageBytes,
 	}, nil
 }
 
-func makeScaledTiffData(iData *tiffData, longestSide uint) *tiffData {
+func makeScaledTiffData(iData *tiffData, longestSide uint, suffix string) *tiffData {
 	newImage := scaleImage(iData.ImageData, longestSide)
 
 	return &tiffData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }
 
-func makeThumbnailTiffData(iData *tiffData) *tiffData {
+func makeThumbnailTiffData(iData *tiffData, suffix string) *tiffData {
 	newImage := makeThumbnail(iData.ImageData)
 
 	return &tiffData{
+		Suffix:    suffix,
 		ImageData: newImage,
 	}
 }

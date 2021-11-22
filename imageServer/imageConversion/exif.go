@@ -5,6 +5,39 @@ import (
 	"io"
 )
 
+/****************************************************************************************
+ * exifData
+*****************************************************************************************/
+
+// Representation of EXIF data, plus convenience functions for generating data
+// needed for encoding jpeg info.
+type exifData struct {
+	ExifData []byte
+}
+
+// Generates APP1 Marker bytes and File sizes.
+func (exif *exifData) makeSizeData() []byte {
+	markerlen := 2 + len(exif.ExifData)
+
+	// The size of the marker is represented as 2 bytes, so we have to convert the
+	// length into two bytes to place into the exif marker
+	sizeByte1 := uint8(markerlen >> 8)
+	sizeByte2 := uint8(markerlen & 0xff)
+
+	// FF E1 are the first two bytes for the exif Marker
+	exifMarker := []byte{0xff, 0xe1, sizeByte1, sizeByte2}
+
+	return exifMarker
+}
+
+// Generates the marker, file size and appends the exif data.
+func (exif *exifData) makeFileData() []byte {
+	data := exif.makeSizeData()
+	data = append(data, exif.ExifData...)
+
+	return data
+}
+
 // Skip Writer for exif writing
 type writerSkipper struct {
 	writer      io.Writer

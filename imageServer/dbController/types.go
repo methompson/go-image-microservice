@@ -13,11 +13,18 @@ type UserDataDocument struct {
 }
 
 type AddImageDocument struct {
-	Title     string
-	FileName  string
-	Tags      *[]string
-	AuthorId  string
-	DateAdded time.Time
+	Title       string
+	FileName    string
+	Tags        *[]string
+	SizeFormats []*ImageSizeFormat
+	AuthorId    string
+	DateAdded   time.Time
+}
+
+type ImageSizeFormat struct {
+	Filename  string
+	ImageSize *ImageSize
+	FileSize  int
 }
 
 type ImageDocument struct {

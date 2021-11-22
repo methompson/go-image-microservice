@@ -6,6 +6,10 @@ import (
 	"methompson.com/image-microservice/imageServer/dbController"
 )
 
+const IMAGE_COLLECTION = "images"
+const LOGGING_COLLECTION = "logging"
+const USER_COLLECTION = "users"
+
 type UserDocResult struct {
 	Id    string `bson:"_id"`
 	UID   string `bson:"uid"`

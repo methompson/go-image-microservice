@@ -15,10 +15,6 @@ import (
 	"methompson.com/image-microservice/imageServer/logging"
 )
 
-const IMAGE_COLLECTION = "images"
-const LOGGING_COLLECTION = "logging"
-const USER_COLLECTION = "users"
-
 type MongoDbController struct {
 	MongoClient *mongo.Client
 	dbName      string
