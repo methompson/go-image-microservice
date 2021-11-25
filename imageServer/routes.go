@@ -82,7 +82,7 @@ func (srv *ImageServer) GetImagesByPage(ctx *gin.Context) {
 func (srv *ImageServer) PostAddImage(ctx *gin.Context) {
 	metaStr := ctx.PostForm("meta")
 	meta := srv.ParseFormMetadata(metaStr)
-	fmt.Println(meta.Private)
+	fmt.Printf("Meta: %v\n", meta.Private)
 
 	fileSaveErr := srv.ImageController.AddImageFile(ctx)
 

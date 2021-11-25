@@ -2,6 +2,8 @@ package dbController
 
 import (
 	"time"
+
+	"methompson.com/image-microservice/imageServer/imageConversion"
 )
 
 type UserDataDocument struct {
@@ -16,15 +18,9 @@ type AddImageDocument struct {
 	Title       string
 	FileName    string
 	Tags        *[]string
-	SizeFormats []*ImageSizeFormat
+	SizeFormats []*imageConversion.ImageSizeFormat
 	AuthorId    string
 	DateAdded   time.Time
-}
-
-type ImageSizeFormat struct {
-	Filename  string
-	ImageSize *ImageSize
-	FileSize  int
 }
 
 type ImageDocument struct {
@@ -45,12 +41,7 @@ type ImageLocation struct {
 	SizeType  string
 	Url       string
 	FileSize  int
-	ImageSize *ImageSize
-}
-
-type ImageSize struct {
-	Width  int
-	Height int
+	ImageSize *imageConversion.ImageSize
 }
 
 func (bd *ImageDocument) GetMap() *map[string]interface{} {

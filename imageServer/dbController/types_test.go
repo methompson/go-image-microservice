@@ -3,10 +3,12 @@ package dbController
 import (
 	"testing"
 	"time"
+
+	"methompson.com/image-microservice/imageServer/imageConversion"
 )
 
 func TestImageLocGetMap(t *testing.T) {
-	is1 := ImageSize{Width: 300, Height: 200}
+	is1 := imageConversion.ImageSize{Width: 300, Height: 200}
 
 	il1 := ImageLocation{
 		SizeType:  "Test Size",
@@ -15,7 +17,7 @@ func TestImageLocGetMap(t *testing.T) {
 		ImageSize: &is1,
 	}
 
-	is2 := ImageSize{Width: 640, Height: 480}
+	is2 := imageConversion.ImageSize{Width: 640, Height: 480}
 
 	il2 := ImageLocation{
 		SizeType:  "Test Size Larger",

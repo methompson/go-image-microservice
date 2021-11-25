@@ -1,10 +1,12 @@
 package imageServer
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 
 	"methompson.com/image-microservice/imageServer/dbController"
-	"methompson.com/image-microservice/imageServer/imageConversion"
+	iconv "methompson.com/image-microservice/imageServer/imageConversion"
 	"methompson.com/image-microservice/imageServer/logging"
 )
 
@@ -27,11 +29,21 @@ func (ic *ImageController) AddLogger(logger *logging.ImageLogger) {
 }
 
 func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
-	_, conversionErr := imageConversion.ProcessImageFile(ctx)
+	scaleRequests := make([]*iconv.ScaleRequest, 0)
+	scaleRequests = append(scaleRequests, &iconv.ScaleRequest{
+		LongestSide: 1000,
+		Suffix:      "web",
+	})
+
+	output, conversionErr := iconv.ProcessImageFile(ctx, scaleRequests)
 
 	if conversionErr != nil {
 		return conversionErr
 	}
+
+	// iconv.RollBackWrites(output)
+
+	fmt.Println(output.Name)
 
 	return nil
 }

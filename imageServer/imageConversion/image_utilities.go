@@ -28,9 +28,27 @@ func scaleImage(img *image.Image, longestSide uint) *image.Image {
 		newWidth = newShorter
 	}
 
-	var image = resize.Resize(newWidth, uint(newHeight), *img, resize.Lanczos3)
+	var image = resize.Resize(newWidth, newHeight, *img, resize.Lanczos3)
 
 	return &image
+}
+
+func scaleImageByWidth(img *image.Image, newWidth uint) *image.Image {
+	width := float64((*img).Bounds().Max.X)
+	height := float64((*img).Bounds().Max.Y)
+
+	newHeight := calculateOtherSide(width, height, float64(newWidth))
+
+	var image = resize.Resize(newWidth, newHeight, *img, resize.Lanczos3)
+
+	return &image
+}
+
+// Given two sides, side1 and side2, this function calculates new side 2 when given
+// new side 1 by finding the aspect ratio between the two sides. The end result is
+// a new side the produces the same or similar aspect ratio
+func calculateOtherSide(side1, side2, newSide1 float64) uint {
+	return uint(math.RoundToEven(newSide1 / (side1 / side2)))
 }
 
 // For this, we calculate the AR, longer / shorter, then divide the longest
@@ -48,7 +66,7 @@ func calculateShorterDimension(side1, side2, newLongSide float64) uint {
 		shorterSide = side1
 	}
 
-	return uint(math.RoundToEven(newLongSide / (longerSide / shorterSide)))
+	return calculateOtherSide(longerSide, shorterSide, newLongSide)
 }
 
 func makeThumbnail(img *image.Image) *image.Image {
@@ -67,5 +85,4 @@ func getJpegQuality() int {
 	}
 
 	return val
-
 }
