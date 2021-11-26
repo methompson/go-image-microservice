@@ -48,22 +48,16 @@ func MakeImageSizeFormat(filename string, fileSize int, imageSize *ImageSize) *I
 // metadata will allow for a generic container that can transcode from one format to another.
 type imageData struct {
 	OriginalImageType ImageType
-	EncodeTo          *ImageType
+	EncodeTo          ImageType
 	OriginalData      []byte
 	ImageData         *image.Image
 	ExifData          *exifData
 	Suffix            string
+	Orientation       Orientation
 }
 
 func (dat *imageData) GetExtension() string {
-	var iType ImageType
-	if dat.EncodeTo != nil {
-		iType = *dat.EncodeTo
-	} else {
-		iType = dat.OriginalImageType
-	}
-
-	switch iType {
+	switch dat.EncodeTo {
 	case Jpeg:
 		return "jpg"
 	case Png:
@@ -82,15 +76,7 @@ func (dat *imageData) GetExtension() string {
 // Checks the EncodeTo parameter. If it's specified, it uses that image format to
 // encode the image. If it's not specified, it encodes using the OriginalImageType format.
 func (dat *imageData) EncodeImage() ([]byte, error) {
-	var iType ImageType
-
-	if dat.EncodeTo != nil {
-		iType = *dat.EncodeTo
-	} else {
-		iType = dat.OriginalImageType
-	}
-
-	switch iType {
+	switch dat.EncodeTo {
 	case Jpeg:
 		return (*dat).EncodeJpegImage()
 	case Png:
@@ -205,6 +191,12 @@ func (dat *imageData) EncodeTiffImage() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (dat *imageData) EncodeToJpeg() { dat.EncodeTo = Jpeg }
+func (dat *imageData) EncodeToPng()  { dat.EncodeTo = Png }
+func (dat *imageData) EncodeToGif()  { dat.EncodeTo = Gif }
+func (dat *imageData) EncodeToBmp()  { dat.EncodeTo = Bmp }
+func (dat *imageData) EncodeToTiff() { dat.EncodeTo = Tiff }
+
 func (dat *imageData) MakeThumbnail() *imageData {
 	newImage := makeThumbnail(dat.ImageData)
 
@@ -214,6 +206,7 @@ func (dat *imageData) MakeThumbnail() *imageData {
 		ImageData:         newImage,
 		ExifData:          dat.ExifData,
 		Suffix:            "thumb",
+		Orientation:       dat.Orientation,
 	}
 }
 
@@ -228,6 +221,23 @@ func (dat *imageData) ResizeImage(suffix string, longestSide uint) *imageData {
 		ImageData:         newImage,
 		ExifData:          dat.ExifData,
 		Suffix:            suffix,
+		Orientation:       dat.Orientation,
+	}
+}
+
+// Creates a new imageData struct from the existing struct with a different image size.
+// Also allows the user to define a new output format.
+func (dat *imageData) ResizeImageByWidth(suffix string, width uint) *imageData {
+	rotated := dat.Orientation == RotateCCW || dat.Orientation == RotateCW
+	newImage := scaleImageByWidth(dat.ImageData, width, rotated)
+
+	return &imageData{
+		OriginalImageType: dat.OriginalImageType,
+		EncodeTo:          dat.EncodeTo,
+		ImageData:         newImage,
+		ExifData:          dat.ExifData,
+		Suffix:            suffix,
+		Orientation:       dat.Orientation,
 	}
 }
 
@@ -249,10 +259,12 @@ func makeImageDataFromBytes(imageBytes []byte, suffix string) (*imageData, error
 
 	var iType ImageType
 	var exifDat *exifData
+	var orientation Orientation = Horizontal
 	switch t {
 	case "jpeg":
 		iType = Jpeg
 		exifDat = extractJpegExif(imageBytes)
+		orientation = exifDat.isImageRotated()
 	case "png":
 		iType = Png
 	case "gif":
@@ -267,29 +279,23 @@ func makeImageDataFromBytes(imageBytes []byte, suffix string) (*imageData, error
 
 	return &imageData{
 		OriginalImageType: iType,
-		EncodeTo:          &iType,
+		EncodeTo:          iType,
 		OriginalData:      imageBytes,
 		ImageData:         &originalImage,
 		ExifData:          exifDat,
 		Suffix:            suffix,
+		Orientation:       orientation,
 	}, nil
 }
 
-func makeImageDataFromImage(imgDat *image.Image, iType ImageType, suffix string) *imageData {
+func makeImageDataFromImage(imgDat *image.Image, iType ImageType, suffix string, exifDat *exifData) *imageData {
+	orientation := exifDat.isImageRotated()
 	return &imageData{
 		OriginalImageType: iType,
-		EncodeTo:          &iType,
-		ImageData:         imgDat,
-		Suffix:            suffix,
-	}
-}
-
-func makeImageDataFromImageWithExif(imgDat *image.Image, iType ImageType, suffix string, exifDat *exifData) *imageData {
-	return &imageData{
-		OriginalImageType: iType,
-		EncodeTo:          &iType,
+		EncodeTo:          iType,
 		ImageData:         imgDat,
 		ExifData:          exifDat,
 		Suffix:            suffix,
+		Orientation:       orientation,
 	}
 }

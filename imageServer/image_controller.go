@@ -34,6 +34,11 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 		LongestSide: 1000,
 		Suffix:      "web",
 	})
+	scaleRequests = append(scaleRequests, &iconv.ScaleRequest{
+		LongestSide: 1000,
+		Suffix:      "wide-web",
+		ByWidth:     true,
+	})
 
 	output, conversionErr := iconv.ProcessImageFile(ctx, scaleRequests)
 

@@ -3,7 +3,6 @@ package imageConversion
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	_ "image/gif"
 	"io/ioutil"
 
@@ -23,8 +22,8 @@ func ProcessImageFile(ctx *gin.Context, scaleRequests []*ScaleRequest) (*ImageOu
 	}
 	defer file.Close()
 
-	originalFileName := fileHandler.Filename
-	fmt.Println(originalFileName)
+	// originalFileName := fileHandler.Filename
+	// fmt.Println(originalFileName)
 
 	contentType := fileHandler.Header.Get("Content-Type")
 
@@ -95,19 +94,21 @@ func processNewHeifImage(imageBytes []byte, scaleRequests []*ScaleRequest) (*Ima
 		return nil, err
 	}
 
+	// os.WriteFile("./files/exif.dat", exif, 0644)
+
 	image, err := goheif.Decode(reader)
 	if err != nil {
 		return nil, err
 	}
 
-	imgDat := makeImageDataFromImageWithExif(&image, Jpeg, "original", &exifData{ExifData: exif})
-	newBytes, err := (*imgDat).EncodeImage()
+	imgDat := makeImageDataFromImage(&image, Jpeg, "original", &exifData{ExifData: exif})
+	// newBytes, err := (*imgDat).EncodeImage()
 
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	return processNewImage(newBytes, scaleRequests)
+	return convertAndWriteImage(imgDat, scaleRequests)
 }
 
 // Takes an image file and processes the file based on environment or user parameters.
@@ -120,9 +121,21 @@ func processNewImage(imageBytes []byte, scaleRequests []*ScaleRequest) (*ImageOu
 		return nil, imageErr
 	}
 
+	return convertAndWriteImage(imgDat, scaleRequests)
+}
+
+func convertAndWriteImage(imgDat *imageData, scaleRequests []*ScaleRequest) (*ImageOutputData, error) {
 	iw := MakeImageWriter()
 	iw.AddNewFile(imgDat)
 	iw.AddNewFile(imgDat.MakeThumbnail())
+
+	for _, req := range scaleRequests {
+		if req.ByWidth {
+			iw.AddNewFile(imgDat.ResizeImageByWidth(req.Suffix, req.LongestSide))
+		} else {
+			iw.AddNewFile(imgDat.ResizeImage(req.Suffix, req.LongestSide))
+		}
+	}
 
 	output, writeErr := iw.Commit()
 

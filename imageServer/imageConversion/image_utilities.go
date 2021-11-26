@@ -33,13 +33,32 @@ func scaleImage(img *image.Image, longestSide uint) *image.Image {
 	return &image
 }
 
-func scaleImageByWidth(img *image.Image, newWidth uint) *image.Image {
-	width := float64((*img).Bounds().Max.X)
-	height := float64((*img).Bounds().Max.Y)
+func scaleImageByWidth(img *image.Image, newWidth uint, rotated bool) *image.Image {
+	if rotated {
+		return scaleImageByX(img, newWidth)
+	} else {
+		return scaleImageByY(img, newWidth)
+	}
+}
 
-	newHeight := calculateOtherSide(width, height, float64(newWidth))
+func scaleImageByX(img *image.Image, newX uint) *image.Image {
+	X := float64((*img).Bounds().Max.X)
+	Y := float64((*img).Bounds().Max.Y)
 
-	var image = resize.Resize(newWidth, newHeight, *img, resize.Lanczos3)
+	newY := calculateOtherSide(Y, X, float64(newX))
+
+	var image = resize.Resize(newY, newX, *img, resize.Lanczos3)
+
+	return &image
+}
+
+func scaleImageByY(img *image.Image, newY uint) *image.Image {
+	X := float64((*img).Bounds().Max.X)
+	Y := float64((*img).Bounds().Max.Y)
+
+	newX := calculateOtherSide(X, Y, float64(newY))
+
+	var image = resize.Resize(newX, newY, *img, resize.Lanczos3)
 
 	return &image
 }

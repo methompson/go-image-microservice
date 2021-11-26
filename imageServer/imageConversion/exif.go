@@ -5,6 +5,28 @@ import (
 	"io"
 )
 
+type Orientation uint8
+
+const (
+	Horizontal Orientation = 1
+	Rotate180  Orientation = 3
+	RotateCW   Orientation = 6
+	RotateCCW  Orientation = 8
+)
+
+func getOrientation(value byte) Orientation {
+	switch value {
+	case 3:
+		return Rotate180
+	case 6:
+		return RotateCW
+	case 8:
+		return RotateCCW
+	default:
+		return Horizontal
+	}
+}
+
 /****************************************************************************************
  * exifData
 *****************************************************************************************/
@@ -36,6 +58,38 @@ func (exif *exifData) makeFileData() []byte {
 	data = append(data, exif.ExifData...)
 
 	return data
+}
+
+// This function reviews the exif binary data, looks for a specific byte order
+// extracts the information after the metadata and compares it to the spec to
+// determine if the image is rotated.
+// Typical IFD ordering for an EXIF tag:
+// TTTT | ffff | NNNNNNNN | DDDDDDDD
+// TTTT (2 bytes) is the tag
+// ffff (2 bytes) is the format
+// NNNNNNNN (4 bytes) is the number of components
+// DDDDDDDD (4 bytes) contains a data value or offset data value
+//Example:  01 12 00 03 00 00 00 01 00 06
+// 01 12 is the tag (orientation)
+// 00 03 is the format (Unsigned short, 2 bytes)
+// 00 00 00 01 is the amount of compeonts (1)
+// 00 06 is the actual value. In this case, 6 or rotate Clockwise
+// Returns an orientation enum
+func (exif *exifData) isImageRotated() Orientation {
+	bytesLength := len(exif.ExifData)
+	for i := 0; i < bytesLength-1; i++ {
+		byte1 := exif.ExifData[i]
+		byte2 := exif.ExifData[i+1]
+
+		// We check that byte1 & byte2 == 0x0112 and that there are 16 more
+		// bytes after 0x0112
+		if byte1 == 0x01 && byte2 == 0x12 && bytesLength-i > 8 {
+			orientationByte := exif.ExifData[i+9]
+			return getOrientation(orientationByte)
+		}
+	}
+
+	return Horizontal
 }
 
 // Skip Writer for exif writing
@@ -97,7 +151,7 @@ func newWriterExif(writer io.Writer, exif *exifData) (io.Writer, error) {
 	return writerSkipper, nil
 }
 
-// TODO find jpeg beinging bytes or EXIF end bytes
+// TODO find jpeg begining bytes or EXIF end bytes
 // FF C0 or something like that
 func extractJpegExif(imageBytes []byte) *exifData {
 	bytesLength := len(imageBytes)
