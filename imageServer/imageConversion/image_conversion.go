@@ -14,41 +14,34 @@ import (
 	"github.com/jdeng/goheif"
 )
 
-func ProcessImageFile(ctx *gin.Context, scaleRequests []*ScaleRequest) (*ImageOutputData, error) {
-	file, fileHandler, fileErr := ctx.Request.FormFile("image")
+func ProcessImageFile(ctx *gin.Context, scaleRequests []*ConversionRequest) (*ImageOutputData, error) {
+	file, fileHeader, fileErr := ctx.Request.FormFile("image")
 
 	if fileErr != nil {
 		return nil, fileErr
 	}
 	defer file.Close()
 
-	// originalFileName := fileHandler.Filename
-	// fmt.Println(originalFileName)
-
-	contentType := fileHandler.Header.Get("Content-Type")
-
+	contentType := fileHeader.Header.Get("Content-Type")
 	fileBytes, fileBytesErr := ioutil.ReadAll(file)
-
 	if fileBytesErr != nil {
 		return nil, fileBytesErr
 	}
 
-	switch contentType {
-	case "image/heic":
-		return processNewHeifImage(fileBytes, scaleRequests)
-	case "image/jpeg":
-		return processNewImage(fileBytes, scaleRequests)
-	case "image/png":
-		return processNewImage(fileBytes, scaleRequests)
-	case "image/gif":
-		return processNewImage(fileBytes, scaleRequests)
-	case "image/bmp":
-		return processNewImage(fileBytes, scaleRequests)
-	case "image/tiff":
-		return processNewImage(fileBytes, scaleRequests)
-	default:
-		return nil, errors.New("invalid image format")
+	originalFileName := fileHeader.Filename
+	// fmt.Println(originalFileName)
+
+	if contentType == "image/heic" {
+		return processNewHeifImage(fileBytes, originalFileName, scaleRequests)
+	} else if contentType == "image/jpeg" ||
+		contentType == "image/png" ||
+		contentType == "image/gif" ||
+		contentType == "image/bmp" ||
+		contentType == "image/tiff" {
+		return processNewImage(fileBytes, originalFileName, scaleRequests)
 	}
+
+	return nil, errors.New("invalid image format")
 }
 
 // Returns a string to be used as a file name. Currently just uses UUID
@@ -87,7 +80,7 @@ func deleteFile(filePath string) error {
 // * Get an *image.Image struct
 // * Get the exif
 // Then we pass the above two points to the encode Jpeg function.
-func processNewHeifImage(imageBytes []byte, scaleRequests []*ScaleRequest) (*ImageOutputData, error) {
+func processNewHeifImage(imageBytes []byte, originalFileName string, conversionRequests []*ConversionRequest) (*ImageOutputData, error) {
 	reader := bytes.NewReader(imageBytes)
 	exif, err := goheif.ExtractExif(reader)
 	if err != nil {
@@ -101,40 +94,31 @@ func processNewHeifImage(imageBytes []byte, scaleRequests []*ScaleRequest) (*Ima
 		return nil, err
 	}
 
-	imgDat := makeImageDataFromImage(&image, Jpeg, "original", &exifData{ExifData: exif})
-	// newBytes, err := (*imgDat).EncodeImage()
+	imgDat := makeImageDataFromImage(&image, Jpeg, &exifData{ExifData: exif})
 
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	return convertAndWriteImage(imgDat, scaleRequests)
+	return convertAndWriteImage(imgDat, originalFileName, conversionRequests)
 }
 
 // Takes an image file and processes the file based on environment or user parameters.
 // imageBytes represents a file send to the function. The function confirms the jpeg
 // data, parses the file, performs scale operations and save the data to the file system.
-func processNewImage(imageBytes []byte, scaleRequests []*ScaleRequest) (*ImageOutputData, error) {
-	imgDat, imageErr := makeImageDataFromBytes(imageBytes, "original")
+func processNewImage(imageBytes []byte, originalFileName string, conversionRequests []*ConversionRequest) (*ImageOutputData, error) {
+	imgDat, imageErr := makeImageDataFromBytes(imageBytes)
 
 	if imageErr != nil {
 		return nil, imageErr
 	}
 
-	return convertAndWriteImage(imgDat, scaleRequests)
+	return convertAndWriteImage(imgDat, originalFileName, conversionRequests)
 }
 
-func convertAndWriteImage(imgDat *imageData, scaleRequests []*ScaleRequest) (*ImageOutputData, error) {
-	iw := MakeImageWriter()
-	iw.AddNewFile(imgDat)
-	iw.AddNewFile(imgDat.MakeThumbnail())
+func convertAndWriteImage(imgDat *imageData, originalFileName string, conversionRequests []*ConversionRequest) (*ImageOutputData, error) {
+	iw := MakeImageWriter(originalFileName, imgDat)
+	iw.AddNewOp(makeOriginalOp())
 
-	for _, req := range scaleRequests {
-		if req.ByWidth {
-			iw.AddNewFile(imgDat.ResizeImageByWidth(req.Suffix, req.LongestSide))
-		} else {
-			iw.AddNewFile(imgDat.ResizeImage(req.Suffix, req.LongestSide))
-		}
+	for _, req := range conversionRequests {
+		op := makeOpFromRequest(req)
+		iw.AddNewOp(op)
 	}
 
 	output, writeErr := iw.Commit()

@@ -35,30 +35,35 @@ func scaleImage(img *image.Image, longestSide uint) *image.Image {
 
 func scaleImageByWidth(img *image.Image, newWidth uint, rotated bool) *image.Image {
 	if rotated {
-		return scaleImageByX(img, newWidth)
-	} else {
 		return scaleImageByY(img, newWidth)
+	} else {
+		return scaleImageByX(img, newWidth)
 	}
 }
 
-func scaleImageByX(img *image.Image, newX uint) *image.Image {
-	X := float64((*img).Bounds().Max.X)
-	Y := float64((*img).Bounds().Max.Y)
-
-	newY := calculateOtherSide(Y, X, float64(newX))
-
-	var image = resize.Resize(newY, newX, *img, resize.Lanczos3)
-
-	return &image
-}
-
+// Scales an image such that the Aspect ratio is (mostly) constrained. Scales the
+// X value so that it aligns with the newY value.
 func scaleImageByY(img *image.Image, newY uint) *image.Image {
 	X := float64((*img).Bounds().Max.X)
 	Y := float64((*img).Bounds().Max.Y)
 
-	newX := calculateOtherSide(X, Y, float64(newY))
+	newX := calculateOtherSide(Y, X, float64(newY))
 
 	var image = resize.Resize(newX, newY, *img, resize.Lanczos3)
+
+	return &image
+}
+
+// Scales an image such that the Aspect ratio is (mostly) constrained. Scales the
+// Y value so that it aligns with the newX value.
+func scaleImageByX(img *image.Image, newX uint) *image.Image {
+	X := float64((*img).Bounds().Max.X)
+	Y := float64((*img).Bounds().Max.Y)
+
+	newY := calculateOtherSide(X, Y, float64(newX))
+
+	var image = resize.Resize(newX, newY, *img, resize.Lanczos3)
+	// var image = resize.Resize(newY, newX, *img, resize.Lanczos3)
 
 	return &image
 }
@@ -88,8 +93,10 @@ func calculateShorterDimension(side1, side2, newLongSide float64) uint {
 	return calculateOtherSide(longerSide, shorterSide, newLongSide)
 }
 
+// Scales an image using the resize.Thumbnail function.
 func makeThumbnail(img *image.Image) *image.Image {
-	var thumb = resize.Thumbnail(128, 128, *img, resize.Lanczos3)
+	dim := getThumbnailDimenions()
+	var thumb = resize.Thumbnail(dim, dim, *img, resize.Lanczos3)
 	return &thumb
 }
 
@@ -104,4 +111,17 @@ func getJpegQuality() int {
 	}
 
 	return val
+}
+
+// Gets dimensions for a thumbnail. Retrieves the value from the env
+// and if it doesn't exist or the value is erroneous, returns 128 as
+// a default
+func getThumbnailDimenions() uint {
+	val, err := strconv.ParseUint(os.Getenv(constants.THUMBNAIL_SIZE), 10, 0)
+
+	if err != nil || val > 100 {
+		return 128
+	}
+
+	return uint(val)
 }
