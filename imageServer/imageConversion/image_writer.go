@@ -2,6 +2,7 @@ package imageConversion
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"sync"
@@ -12,18 +13,25 @@ import (
 // individual image data structs that will eventually be written.
 type ImageWriter struct {
 	OriginalFileName string
-	imageOperations  map[string]*ConversionOp
-	imageData        *imageData
+	imageOperations  map[string]ConversionOp
+	imageData        imageData
 }
 
-func (iw *ImageWriter) makeFileName(name string, op *ConversionOp) string {
-	return name + "@" + op.Suffix + "." + (*iw).GetExtension(op)
+func (iw *ImageWriter) makeFileName(name string, op ConversionOp) string {
+	var suffix string
+	if op.Obfuscate {
+		suffix = ""
+	} else {
+		suffix = "@" + op.Suffix
+	}
+
+	return name + suffix + "." + (*iw).GetExtension(op)
 }
 
-func (iw *ImageWriter) GetExtension(op *ConversionOp) string {
+func (iw *ImageWriter) GetExtension(op ConversionOp) string {
 	var iType ImageType
-	if op.EncodeTo != nil {
-		iType = *op.EncodeTo
+	if op.CompressTo != Same {
+		iType = op.CompressTo
 	} else {
 		iType = (*iw).imageData.OriginalImageType
 	}
@@ -44,33 +52,38 @@ func (iw *ImageWriter) GetExtension(op *ConversionOp) string {
 	}
 }
 
-func (iw *ImageWriter) AddNewOp(op *ConversionOp) {
+func (iw *ImageWriter) AddNewOp(op ConversionOp) {
 	iw.imageOperations[op.Suffix] = op
 }
 
 // Commit takes all image sizes defined in imagesToCommit and writes them all to disk.
 // Performs all operations asynchronously, but doesn't finish until all operations are
 // finished.
-func (iw *ImageWriter) Commit() (*ImageOutputData, error) {
+func (iw *ImageWriter) Commit() (ImageOutputData, error) {
 	// This will be the end result
-	sizeFormats := make([]*ImageSizeFormat, 0)
+	sizeFormats := make([]ImageSizeFormat, 0)
 
 	// We get the total operation length and create output and error channels to get
 	// necessary information from the operations themselves.
 	totalOps := len(iw.imageOperations)
 
-	outputChannel := make(chan *ImageSizeFormat, totalOps)
+	outputChannel := make(chan ImageSizeFormat, totalOps)
 	errorChannel := make(chan error, totalOps)
 
 	// We use a WaitGroup to sync all operations
 	var wg sync.WaitGroup
 
 	// The name will be a UUID to minimize potential name collissions
-	var name string
+	baseName := makeRandomName()
 	for _, imgOp := range iw.imageOperations {
-		if name == "" || imgOp.Obfuscate {
+		var name string
+		if imgOp.Obfuscate {
 			name = makeRandomName()
+		} else {
+			name = baseName
 		}
+
+		fmt.Println(iw.makeFileName(name, imgOp))
 
 		// We have to assign the value of imgOp to a variable so that it's not changed
 		// when the next loop iteration occurs. The go routine can wait until a blocking
@@ -116,14 +129,14 @@ func (iw *ImageWriter) Commit() (*ImageOutputData, error) {
 
 	if len(errs) > 0 {
 		iw.rollback(sizeFormats)
-		return nil, errors.New("write error. rolling back operation")
+		return ImageOutputData{}, errors.New("write error. rolling back operation")
 	}
 
 	return makeImageOutputData(iw, sizeFormats), nil
 }
 
 // Rollback image writes
-func (iw *ImageWriter) rollback(writtenImages []*ImageSizeFormat) []error {
+func (iw *ImageWriter) rollback(writtenImages []ImageSizeFormat) []error {
 	errs := make([]error, 0)
 	for _, imgDat := range writtenImages {
 		folderPath := GetImagePath(imgDat.Filename)
@@ -142,8 +155,7 @@ func (iw *ImageWriter) rollback(writtenImages []*ImageSizeFormat) []error {
 // Takes an image operation and name, performs the conversion, gets image information
 // and returns the ImageSizeFormat for the converted file. Returns an error if there's
 // a problem with the write.
-func (iw *ImageWriter) writeNewFile(imgOp *ConversionOp, name string) (*ImageSizeFormat, error) {
-	dat := *iw.imageData
+func (iw *ImageWriter) writeNewFile(imgOp ConversionOp, name string) (ImageSizeFormat, error) {
 	filename := iw.makeFileName(name, imgOp)
 
 	folderPath := GetImagePath(filename)
@@ -151,31 +163,31 @@ func (iw *ImageWriter) writeNewFile(imgOp *ConversionOp, name string) (*ImageSiz
 	folderErr := CheckOrCreateImageFolder(folderPath)
 
 	if folderErr != nil {
-		return nil, folderErr
+		return ImageSizeFormat{}, folderErr
 	}
 
 	filePath := path.Join(folderPath, filename)
-	bytes, imgSize, encodeErr := dat.EncodeImage(imgOp)
+	bytes, imgSize, encodeErr := iw.imageData.EncodeImage(imgOp)
 
 	if encodeErr != nil {
-		return nil, encodeErr
+		return ImageSizeFormat{}, encodeErr
 	}
 
 	writeErr := os.WriteFile(filePath, bytes, 0644)
 
 	if writeErr != nil {
-		return nil, writeErr
+		return ImageSizeFormat{}, writeErr
 	}
 
-	imgSizeF := MakeImageSizeFormat(filename, len(bytes), imgSize)
+	imgSizeF := MakeImageSizeFormat(filename, len(bytes), imgSize, imgOp.Private)
 
 	return imgSizeF, nil
 }
 
-func MakeImageWriter(originalFileName string, imgData *imageData) *ImageWriter {
-	return &ImageWriter{
+func MakeImageWriter(originalFileName string, imgData imageData) ImageWriter {
+	return ImageWriter{
 		OriginalFileName: originalFileName,
-		imageOperations:  make(map[string]*ConversionOp),
+		imageOperations:  make(map[string]ConversionOp),
 		imageData:        imgData,
 	}
 }

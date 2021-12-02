@@ -29,25 +29,10 @@ func (ic *ImageController) AddLogger(logger *logging.ImageLogger) {
 }
 
 func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
-	convRequests := make([]*iconv.ConversionRequest, 0)
-	convRequests = append(convRequests, &iconv.ConversionRequest{
-		Suffix:   "thumb",
-		ResizeOp: "thumbnail",
-	})
+	metaStr := ctx.PostForm("meta")
+	imageFormData := parseAddImageFormString(metaStr)
 
-	var longestSide uint = 1000
-	convRequests = append(convRequests, &iconv.ConversionRequest{
-		LongestSide: &longestSide,
-		Suffix:      "web",
-		ResizeOp:    "scale",
-	})
-	convRequests = append(convRequests, &iconv.ConversionRequest{
-		LongestSide: &longestSide,
-		Suffix:      "wide-web",
-		ResizeOp:    "scalebywidth",
-	})
-
-	output, conversionErr := iconv.ProcessImageFile(ctx, convRequests)
+	output, conversionErr := iconv.ProcessImageFile(ctx, imageFormData.Operations)
 
 	if conversionErr != nil {
 		return conversionErr

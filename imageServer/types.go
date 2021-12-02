@@ -6,6 +6,7 @@ import (
 
 	"methompson.com/image-microservice/imageServer/constants"
 	"methompson.com/image-microservice/imageServer/dbController"
+	"methompson.com/image-microservice/imageServer/imageConversion"
 )
 
 func DebugMode() bool {
@@ -91,12 +92,12 @@ func (dbb *DeleteImageBody) GetBlogDocument() *dbController.DeleteImageDocument 
 	return &doc
 }
 
-type ImageFormMetaData struct {
-	Private bool `json:"private"`
+type AddImageFormData struct {
+	Operations []imageConversion.ConversionRequest `json:"operations"`
 }
 
-func GetDefaultImageFormMetaData() *ImageFormMetaData {
-	return &ImageFormMetaData{
-		Private: false,
+func GetDefaultImageFormMetaData() AddImageFormData {
+	return AddImageFormData{
+		Operations: make([]imageConversion.ConversionRequest, 0),
 	}
 }

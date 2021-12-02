@@ -80,10 +80,6 @@ func (srv *ImageServer) GetImagesByPage(ctx *gin.Context) {
 // undo command will revert either action in order to prevent ghost
 // entries from existing.
 func (srv *ImageServer) PostAddImage(ctx *gin.Context) {
-	metaStr := ctx.PostForm("meta")
-	meta := srv.ParseFormMetadata(metaStr)
-	fmt.Printf("Meta: %v\n", meta.Private)
-
 	fileSaveErr := srv.ImageController.AddImageFile(ctx)
 
 	if fileSaveErr != nil {

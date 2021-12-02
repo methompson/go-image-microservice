@@ -1,0 +1,16 @@
+{
+  "operations": [
+    {
+      "compressTo": "jpeg",
+      "suffix": "web",
+      "longestSide": 1000,
+      "obfuscate": "false",
+      "resizeOp": "scale",
+      "private": false
+    },
+    {
+      "suffix": "thumb",
+      "resizeOp": "thumbnail"
+    }
+  ]
+}

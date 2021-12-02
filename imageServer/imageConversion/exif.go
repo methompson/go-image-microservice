@@ -37,6 +37,8 @@ type exifData struct {
 	ExifData []byte
 }
 
+func (exif *exifData) hasData() bool { return (exif.ExifData != nil && len(exif.ExifData) > 0) }
+
 // Generates APP1 Marker bytes and File sizes.
 func (exif *exifData) makeSizeData() []byte {
 	markerlen := 2 + len(exif.ExifData)
@@ -130,7 +132,7 @@ func (w *writerSkipper) Write(data []byte) (int, error) {
 
 // Makes a new writerSkipper with the exif data defined. Inserts the exif data
 // into the buffer, then returns the writer.
-func newWriterExif(writer io.Writer, exif *exifData) (io.Writer, error) {
+func newWriterExif(writer io.Writer, exif exifData) (io.Writer, error) {
 	writerSkipper := &writerSkipper{writer, 2}
 
 	// jpeg file signature. jpeg file formats start with FF D8
@@ -140,7 +142,7 @@ func newWriterExif(writer io.Writer, exif *exifData) (io.Writer, error) {
 		return nil, err
 	}
 
-	if exif != nil {
+	if exif.hasData() {
 		exifData := exif.makeFileData()
 
 		if _, err := writer.Write(exifData); err != nil {
@@ -153,15 +155,15 @@ func newWriterExif(writer io.Writer, exif *exifData) (io.Writer, error) {
 
 // TODO find jpeg begining bytes or EXIF end bytes
 // FF C0 or something like that
-func extractJpegExif(imageBytes []byte) *exifData {
+func extractJpegExif(imageBytes []byte) exifData {
 	bytesLength := len(imageBytes)
 	if bytesLength < 2 {
-		return nil
+		return exifData{}
 	}
 
 	// Check for jpeg magic bytes
 	if imageBytes[0] != 0xff || imageBytes[1] != 0xd8 {
-		return nil
+		return exifData{}
 	}
 
 	length := -1
@@ -183,19 +185,19 @@ func extractJpegExif(imageBytes []byte) *exifData {
 	}
 
 	if length == -1 {
-		return nil
+		return exifData{}
 	}
 
 	end := start + length
 
 	if len(imageBytes) < end {
-		return nil
+		return exifData{}
 	}
 
 	// We have to add 2 to go past the length bytes
 	exif := imageBytes[start+2 : end]
 
-	return &exifData{
+	return exifData{
 		ExifData: exif,
 	}
 }
