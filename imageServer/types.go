@@ -18,16 +18,16 @@ type AuthorizationHeader struct {
 }
 
 type AddImageBody struct {
-	Title          string    `json:"title" binding:"required"`
-	FileName       string    `json:"fileName" binding:"required"`
-	Tags           *[]string `json:"tags"`
-	AuthorId       string    `json:"authorId" binding:"required"`
-	DateAdded      int       `json:"dateAdded" binding:"required"`
-	UpdateAuthorId *string   `json:"updateAuthorId"`
-	DateUpdated    *int      `json:"dateUpdated"`
+	Title          string   `json:"title" binding:"required"`
+	FileName       string   `json:"fileName" binding:"required"`
+	Tags           []string `json:"tags"`
+	AuthorId       string   `json:"authorId" binding:"required"`
+	DateAdded      int      `json:"dateAdded" binding:"required"`
+	UpdateAuthorId *string  `json:"updateAuthorId"`
+	DateUpdated    *int     `json:"dateUpdated"`
 }
 
-func (abb *AddImageBody) GetBlogDocument() *dbController.AddImageDocument {
+func (abb *AddImageBody) GetImageDocument() *dbController.AddImageDocument {
 	dateAdded := time.Unix(int64(abb.DateAdded), 0)
 
 	doc := dbController.AddImageDocument{
@@ -52,7 +52,7 @@ type EditImageBody struct {
 	DateUpdated    *int      `json:"dateUpdated"`
 }
 
-func (ebb *EditImageBody) GetBlogDocument() *dbController.EditImageDocument {
+func (ebb *EditImageBody) GetImageDocument() *dbController.EditImageDocument {
 	var dateAdded *time.Time
 	var dateUpdated *time.Time
 
@@ -93,11 +93,15 @@ func (dbb *DeleteImageBody) GetBlogDocument() *dbController.DeleteImageDocument 
 }
 
 type AddImageFormData struct {
+	Title      string                              `json:"title"`
+	Tags       []string                            `json:"tags"`
 	Operations []imageConversion.ConversionRequest `json:"operations"`
 }
 
 func GetDefaultImageFormMetaData() AddImageFormData {
 	return AddImageFormData{
+		Title:      "",
+		Tags:       make([]string, 0),
 		Operations: make([]imageConversion.ConversionRequest, 0),
 	}
 }

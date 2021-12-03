@@ -74,13 +74,13 @@ func (iw *ImageWriter) Commit() (ImageOutputData, error) {
 	var wg sync.WaitGroup
 
 	// The name will be a UUID to minimize potential name collissions
-	baseName := makeRandomName()
+	idName := makeRandomName()
 	for _, imgOp := range iw.imageOperations {
 		var name string
 		if imgOp.Obfuscate {
 			name = makeRandomName()
 		} else {
-			name = baseName
+			name = idName
 		}
 
 		fmt.Println(iw.makeFileName(name, imgOp))
@@ -132,7 +132,7 @@ func (iw *ImageWriter) Commit() (ImageOutputData, error) {
 		return ImageOutputData{}, errors.New("write error. rolling back operation")
 	}
 
-	return makeImageOutputData(iw, sizeFormats), nil
+	return makeImageOutputData(iw, idName, sizeFormats), nil
 }
 
 // Rollback image writes
@@ -179,7 +179,7 @@ func (iw *ImageWriter) writeNewFile(imgOp ConversionOp, name string) (ImageSizeF
 		return ImageSizeFormat{}, writeErr
 	}
 
-	imgSizeF := MakeImageSizeFormat(filename, len(bytes), imgSize, imgOp.Private)
+	imgSizeF := MakeImageSizeFormat(filename, len(bytes), imgSize, imgOp)
 
 	return imgSizeF, nil
 }

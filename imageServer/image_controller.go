@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"methompson.com/image-microservice/imageServer/dbController"
-	iconv "methompson.com/image-microservice/imageServer/imageConversion"
+	"methompson.com/image-microservice/imageServer/imageConversion"
 	"methompson.com/image-microservice/imageServer/logging"
 )
 
@@ -32,7 +32,7 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 	metaStr := ctx.PostForm("meta")
 	imageFormData := parseAddImageFormString(metaStr)
 
-	output, conversionErr := iconv.ProcessImageFile(ctx, imageFormData.Operations)
+	output, conversionErr := imageConversion.ProcessImageFile(ctx, imageFormData.Operations)
 
 	if conversionErr != nil {
 		return conversionErr
@@ -40,7 +40,7 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 
 	// iconv.RollBackWrites(output)
 
-	fmt.Println(output.Name)
+	fmt.Println(output.OriginalFileName)
 
 	return nil
 }

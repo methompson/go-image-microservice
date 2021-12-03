@@ -10,31 +10,31 @@ import (
 func TestImageLocGetMap(t *testing.T) {
 	is1 := imageConversion.ImageSize{Width: 300, Height: 200}
 
-	il1 := ImageLocation{
-		SizeType:  "Test Size",
-		Url:       "/path/to/test",
+	isf1 := imageConversion.ImageSizeFormat{
+		Filename:  "Test Size",
 		FileSize:  128,
-		ImageSize: &is1,
+		ImageSize: is1,
+		Private:   true,
 	}
 
 	is2 := imageConversion.ImageSize{Width: 640, Height: 480}
 
-	il2 := ImageLocation{
-		SizeType:  "Test Size Larger",
-		Url:       "/path/to/test2",
+	isf2 := imageConversion.ImageSizeFormat{
+		Filename:  "Test Size Larger",
 		FileSize:  256,
-		ImageSize: &is2,
+		ImageSize: is2,
+		Private:   false,
 	}
 
-	locations := make([]*ImageLocation, 0)
-	locations = append(locations, &il1)
-	locations = append(locations, &il2)
+	formats := make([]imageConversion.ImageSizeFormat, 0)
+	formats = append(formats, isf1)
+	formats = append(formats, isf2)
 
-	id := ImageDocument{
+	imgDoc := ImageDocument{
 		Id:             "123",
 		Title:          "test",
 		FileName:       "test.jpg",
-		Locations:      locations,
+		SizeFormats:    formats,
 		Author:         "Test Author",
 		AuthorId:       "456",
 		DateAdded:      time.Now(),
@@ -43,31 +43,31 @@ func TestImageLocGetMap(t *testing.T) {
 		DateUpdated:    time.UnixMilli(0),
 	}
 
-	interfaceData := *id.GetMap()
+	interfaceData := imgDoc.GetMap()
 
 	if interfaceData["id"] != "123" {
 		t.Fatalf("id = '%v', Should be '123'", interfaceData["id"])
 	}
 
-	v := interfaceData["locations"].([]*map[string]interface{})
+	sizeFormats := interfaceData["sizeFormats"].([]map[string]interface{})
 
-	if len(v) != 2 {
-		t.Fatalf("len(v) = '%v', Should be '2'", len(v))
+	if len(sizeFormats) != 2 {
+		t.Fatalf("len(v) = '%v', Should be '2'", len(sizeFormats))
 	}
 
-	imageInfo1 := *v[0]
+	format1 := sizeFormats[0]
 
-	if imageInfo1["sizeType"] != "Test Size" {
-		t.Fatalf("imageInfo1[\"sizeType\"] = '%v', Should be 'Test Size'", imageInfo1["sizeType"])
+	if format1["filename"] != "Test Size" {
+		t.Fatalf("format1[\"filename\"] = '%v', Should be 'Test Size'", format1["filename"])
 	}
-	if imageInfo1["url"] != "/path/to/test" {
-		t.Fatalf("imageInfo1[\"url\"] = '%v', Should be '/path/to/test'", imageInfo1["url"])
+	if format1["private"] != true {
+		t.Fatalf("format1[\"private\"] = '%v', Should be 'true'", format1["private"])
 	}
-	if imageInfo1["fileSize"] != 128 {
-		t.Fatalf("imageInfo1[\"fileSize\"] = '%v', Should be '128'", imageInfo1["v"])
+	if format1["fileSize"] != 128 {
+		t.Fatalf("format1[\"fileSize\"] = '%v', Should be '128'", format1["fileSize"])
 	}
 
-	imageSize1 := *(imageInfo1["imageSize"].(*map[string]interface{}))
+	imageSize1 := format1["imageSize"].(map[string]interface{})
 
 	if imageSize1["width"] != 300 {
 		t.Fatalf("imageSize1[\"width\"] = '%v', Should be '300'", imageSize1["width"])
@@ -77,19 +77,19 @@ func TestImageLocGetMap(t *testing.T) {
 		t.Fatalf("imageSize1[\"height\"] = '%v', Should be '200'", imageSize1["height"])
 	}
 
-	imageInfo2 := *v[1]
+	imageInfo2 := sizeFormats[1]
 
-	if imageInfo2["sizeType"] != "Test Size Larger" {
-		t.Fatalf("imageInfo2[\"sizeType\"] = '%v', Should be 'Test Size Larger'", imageInfo2["sizeType"])
+	if imageInfo2["filename"] != "Test Size Larger" {
+		t.Fatalf("imageInfo2[\"filename\"] = '%v', Should be 'Test Size Larger'", imageInfo2["filename"])
 	}
-	if imageInfo2["url"] != "/path/to/test2" {
-		t.Fatalf("imageInfo2[\"url\"] = '%v', Should be '/path/to/test2'", imageInfo2["url"])
+	if imageInfo2["private"] != false {
+		t.Fatalf("imageInfo2[\"private\"] = '%v', Should be 'false'", imageInfo2["private"])
 	}
 	if imageInfo2["fileSize"] != 256 {
-		t.Fatalf("imageInfo2[\"fileSize\"] = '%v', Should be '256'", imageInfo2["v"])
+		t.Fatalf("imageInfo2[\"fileSize\"] = '%v', Should be '256'", imageInfo2["fileSize"])
 	}
 
-	imageSize2 := *(imageInfo2["imageSize"].(*map[string]interface{}))
+	imageSize2 := imageInfo2["imageSize"].(map[string]interface{})
 
 	if imageSize2["width"] != 640 {
 		t.Fatalf("imageSize2[\"width\"] = '%v', Should be '640'", imageSize2["width"])
