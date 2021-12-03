@@ -59,7 +59,7 @@ func (iw *ImageWriter) AddNewOp(op ConversionOp) {
 // Commit takes all image sizes defined in imagesToCommit and writes them all to disk.
 // Performs all operations asynchronously, but doesn't finish until all operations are
 // finished.
-func (iw *ImageWriter) Commit() (ImageOutputData, error) {
+func (iw *ImageWriter) Commit() (ImageConversionResult, error) {
 	// This will be the end result
 	sizeFormats := make([]ImageSizeFormat, 0)
 
@@ -129,10 +129,10 @@ func (iw *ImageWriter) Commit() (ImageOutputData, error) {
 
 	if len(errs) > 0 {
 		iw.rollback(sizeFormats)
-		return ImageOutputData{}, errors.New("write error. rolling back operation")
+		return ImageConversionResult{}, errors.New("write error. rolling back operation")
 	}
 
-	return makeImageOutputData(iw, idName, sizeFormats), nil
+	return makeImageConversionResult(iw, idName, sizeFormats), nil
 }
 
 // Rollback image writes

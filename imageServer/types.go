@@ -4,6 +4,8 @@ import (
 	"os"
 	"time"
 
+	"firebase.google.com/go/v4/auth"
+
 	"methompson.com/image-microservice/imageServer/constants"
 	"methompson.com/image-microservice/imageServer/dbController"
 	"methompson.com/image-microservice/imageServer/imageConversion"
@@ -104,4 +106,9 @@ func GetDefaultImageFormMetaData() AddImageFormData {
 		Tags:       make([]string, 0),
 		Operations: make([]imageConversion.ConversionRequest, 0),
 	}
+}
+
+type RequestUserData struct {
+	Token *auth.Token
+	Role  string
 }

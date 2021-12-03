@@ -1,6 +1,8 @@
 package imageConversion
 
-import "image"
+import (
+	"image"
+)
 
 type ImageSize struct {
 	Width  int
@@ -23,20 +25,20 @@ func GetImageSize(imgData *image.Image) ImageSize {
 // FileSize is the size of the image file in bytes.
 // Private is a flag representing whether this image is accessible publicly or not
 type ImageSizeFormat struct {
-	Type      string
-	Filename  string
-	ImageSize ImageSize
-	FileSize  int
-	Private   bool
+	FormatName string
+	Filename   string
+	ImageSize  ImageSize
+	FileSize   int
+	Private    bool
 }
 
 func MakeImageSizeFormat(filename string, fileSize int, imageSize ImageSize, imgOp ConversionOp) ImageSizeFormat {
 	return ImageSizeFormat{
-		Type:      imgOp.Suffix,
-		Filename:  filename,
-		ImageSize: imageSize,
-		FileSize:  fileSize,
-		Private:   imgOp.Private,
+		FormatName: imgOp.Suffix,
+		Filename:   filename,
+		ImageSize:  imageSize,
+		FileSize:   fileSize,
+		Private:    imgOp.Private,
 	}
 }
 
@@ -46,18 +48,18 @@ func MakeImageSizeFormat(filename string, fileSize int, imageSize ImageSize, img
 
 // The eventual data struct that communicates the result of having written files to the
 // filesystem. It provides information, like, name, extension and size formats
-type ImageOutputData struct {
+type ImageConversionResult struct {
 	IdName           string
 	OriginalFileName string
 	SizeFormats      []ImageSizeFormat
 }
 
-func (iod *ImageOutputData) AddSizeFormat(sf ImageSizeFormat) {
+func (iod *ImageConversionResult) AddSizeFormat(sf ImageSizeFormat) {
 	iod.SizeFormats = append(iod.SizeFormats, sf)
 }
 
-func makeImageOutputData(iw *ImageWriter, idName string, formats []ImageSizeFormat) ImageOutputData {
-	return ImageOutputData{
+func makeImageConversionResult(iw *ImageWriter, idName string, formats []ImageSizeFormat) ImageConversionResult {
+	return ImageConversionResult{
 		IdName:           idName,
 		OriginalFileName: iw.OriginalFileName,
 		SizeFormats:      formats,

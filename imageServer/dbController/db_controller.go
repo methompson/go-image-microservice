@@ -7,12 +7,12 @@ import (
 type DatabaseController interface {
 	InitDatabase() error
 
-	AddImageData(doc *AddImageDocument) (id string, err error)
-	GetImageDataById(id string) (*ImageDocument, error)
-	GetImagesData(page int, pagination int) ([]*ImageDocument, error)
-	EditImageData(doc *EditImageDocument) error
-	DeleteImageData(doc *DeleteImageDocument) error
+	AddImageData(doc AddImageDocument) (id string, err error)
+	GetImageDataById(id string) (ImageDocument, error)
+	GetImagesData(page int, pagination int) ([]ImageDocument, error)
+	EditImageData(doc EditImageDocument) error
+	DeleteImageData(doc DeleteImageDocument) error
 
-	AddRequestLog(log *logging.RequestLogData) error
-	AddInfoLog(log *logging.InfoLogData) error
+	AddRequestLog(log logging.RequestLogData) error
+	AddInfoLog(log logging.InfoLogData) error
 }

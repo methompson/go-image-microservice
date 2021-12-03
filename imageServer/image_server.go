@@ -186,7 +186,7 @@ func addLogging(is *ImageServer) {
 
 		for _, logger := range is.ImageController.Loggers {
 			l := *logger
-			l.AddRequestLog(&requestData)
+			l.AddRequestLog(requestData)
 		}
 
 		return ""
@@ -227,7 +227,7 @@ func addRecovery(is *ImageServer) {
 
 		for _, logger := range is.ImageController.Loggers {
 			l := *logger
-			l.AddInfoLog(&errorLog)
+			l.AddInfoLog(errorLog)
 		}
 
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -300,21 +300,24 @@ func (srv *ImageServer) GetRoleFromToken(token *auth.Token) (string, error) {
 	return role, nil
 }
 
-func (srv *ImageServer) GetTokenAndRoleFromHeader(ctx *gin.Context) (*auth.Token, string, error) {
+func (srv *ImageServer) GetRequestUserFromHeader(ctx *gin.Context) (RequestUserData, error) {
 	token, tokenErr := srv.GetAuthorizationHeader(ctx)
 
 	// No Token Error
 	if tokenErr != nil {
-		return nil, "", tokenErr
+		return RequestUserData{}, tokenErr
 	}
 
 	role, roleErr := srv.GetRoleFromToken(token)
 
 	if roleErr != nil {
-		return nil, "", roleErr
+		return RequestUserData{}, roleErr
 	}
 
-	return token, role, nil
+	return RequestUserData{
+		Token: token,
+		Role:  role,
+	}, nil
 }
 
 func (srv *ImageServer) CanEditImages(role string) bool {

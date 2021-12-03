@@ -77,8 +77,8 @@ func (ild InfoLogData) PrettyString() string {
 * ImageLogger
 ****************************************************************************************/
 type ImageLogger interface {
-	AddRequestLog(log *RequestLogData) error
-	AddInfoLog(log *InfoLogData) error
+	AddRequestLog(log RequestLogData) error
+	AddInfoLog(log InfoLogData) error
 }
 
 /****************************************************************************************
@@ -90,12 +90,12 @@ type FileLogger struct {
 	FileHandle *os.File
 }
 
-func (fl *FileLogger) AddRequestLog(log *RequestLogData) error {
+func (fl *FileLogger) AddRequestLog(log RequestLogData) error {
 	err := fl.WriteLog(log)
 	return err
 }
 
-func (fl *FileLogger) AddInfoLog(log *InfoLogData) error {
+func (fl *FileLogger) AddInfoLog(log InfoLogData) error {
 	err := fl.WriteLog(log)
 	return err
 }
@@ -110,8 +110,8 @@ func (fl *FileLogger) WriteLog(log LogData) error {
 	return err
 }
 
-func MakeNewFileLogger(path string, name string) (*FileLogger, error) {
-	fl := FileLogger{
+func MakeNewFileLogger(path string, name string) (fl *FileLogger, err error) {
+	fl = &FileLogger{
 		FileName: name,
 		FilePath: path,
 	}
@@ -127,18 +127,18 @@ func MakeNewFileLogger(path string, name string) (*FileLogger, error) {
 	// We return the FileLogger with FileHandle set to nil
 	if pathErr != nil {
 		// do something
-		return &fl, pathErr
+		return fl, pathErr
 	}
 
 	handle, handleErr := os.OpenFile(fullPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	if handleErr != nil {
-		return &fl, handleErr
+		return fl, handleErr
 	}
 
 	fl.FileHandle = handle
 
-	return &fl, nil
+	return fl, nil
 }
 
 /****************************************************************************************
@@ -147,12 +147,12 @@ func MakeNewFileLogger(path string, name string) (*FileLogger, error) {
 type ConsoleLogger struct {
 }
 
-func (cl *ConsoleLogger) AddRequestLog(log *RequestLogData) error {
+func (cl *ConsoleLogger) AddRequestLog(log RequestLogData) error {
 	fmt.Println(log.PrettyString())
 	return nil
 }
 
-func (cl *ConsoleLogger) AddInfoLog(log *InfoLogData) error {
+func (cl *ConsoleLogger) AddInfoLog(log InfoLogData) error {
 	fmt.Println(log.PrettyString())
 	return nil
 }

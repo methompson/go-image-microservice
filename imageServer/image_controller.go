@@ -2,6 +2,7 @@ package imageServer
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -38,9 +39,26 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 		return conversionErr
 	}
 
-	// iconv.RollBackWrites(output)
+	addImgDoc := dbController.AddImageDocument{
+		Title:       imageFormData.Title,
+		Tags:        imageFormData.Tags,
+		IdName:      output.IdName,
+		FileName:    output.OriginalFileName,
+		SizeFormats: output.SizeFormats,
+		AuthorId:    ctx.GetString("userId"),
+		DateAdded:   time.Now(),
+	}
+
+	// imageConversion.RollBackWrites(output)
 
 	fmt.Println(output.OriginalFileName)
+	fmt.Println(addImgDoc.AuthorId)
+
+	_, addImageErr := (*ic.DBController).AddImageData(addImgDoc)
+
+	if addImageErr != nil {
+		return addImageErr
+	}
 
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 )
 
 const IMAGE_COLLECTION = "images"
+const IMAGE_FILE_COLLECTION = "imageFiles"
 const LOGGING_COLLECTION = "logging"
 const USER_COLLECTION = "users"
 

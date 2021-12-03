@@ -3,7 +3,6 @@ package imageConversion
 import (
 	"bytes"
 	"errors"
-	_ "image/gif"
 	"io/ioutil"
 
 	"os"
@@ -17,7 +16,7 @@ import (
 // Starting point for receiving a new image from the user. The gin context and ConversionRequests
 // are passed to this function to process the data, determine the image type and perform all
 // conversion requests.
-func ProcessImageFile(ctx *gin.Context, conversionRequests []ConversionRequest) (ImageOutputData, error) {
+func ProcessImageFile(ctx *gin.Context, conversionRequests []ConversionRequest) (ImageConversionResult, error) {
 	ops := makeNewOpArray()
 	for _, req := range conversionRequests {
 		op, opErr := makeOpFromRequest(req)
@@ -30,14 +29,14 @@ func ProcessImageFile(ctx *gin.Context, conversionRequests []ConversionRequest) 
 	file, fileHeader, fileErr := ctx.Request.FormFile("image")
 
 	if fileErr != nil {
-		return ImageOutputData{}, fileErr
+		return ImageConversionResult{}, fileErr
 	}
 	defer file.Close()
 
 	contentType := fileHeader.Header.Get("Content-Type")
 	fileBytes, fileBytesErr := ioutil.ReadAll(file)
 	if fileBytesErr != nil {
-		return ImageOutputData{}, fileBytesErr
+		return ImageConversionResult{}, fileBytesErr
 	}
 
 	originalFileName := fileHeader.Filename
@@ -53,7 +52,7 @@ func ProcessImageFile(ctx *gin.Context, conversionRequests []ConversionRequest) 
 		return processNewImage(fileBytes, originalFileName, ops)
 	}
 
-	return ImageOutputData{}, errors.New("invalid image format")
+	return ImageConversionResult{}, errors.New("invalid image format")
 }
 
 // Returns a string to be used as a file name. Currently just uses UUID
@@ -62,7 +61,7 @@ func makeRandomName() string {
 }
 
 // Attempts to roll back any writes that already occrred in the case of an error
-func RollBackWrites(data ImageOutputData) error {
+func RollBackWrites(data ImageConversionResult) error {
 	for _, f := range data.SizeFormats {
 		folderPath := GetImagePath(f.Filename)
 		filePath := path.Join(folderPath, f.Filename)
@@ -92,18 +91,18 @@ func deleteFile(filePath string) error {
 // * Get an *image.Image struct
 // * Get the exif
 // Then we pass the above two points to the encode Jpeg function.
-func processNewHeifImage(imageBytes []byte, originalFileName string, conversionOps []ConversionOp) (ImageOutputData, error) {
+func processNewHeifImage(imageBytes []byte, originalFileName string, conversionOps []ConversionOp) (ImageConversionResult, error) {
 	reader := bytes.NewReader(imageBytes)
 	exif, err := goheif.ExtractExif(reader)
 	if err != nil {
-		return ImageOutputData{}, err
+		return ImageConversionResult{}, err
 	}
 
 	// os.WriteFile("./files/exif.dat", exif, 0644)
 
 	image, err := goheif.Decode(reader)
 	if err != nil {
-		return ImageOutputData{}, err
+		return ImageConversionResult{}, err
 	}
 
 	imgDat := makeImageDataFromImage(&image, Jpeg, exifData{ExifData: exif})
@@ -114,17 +113,17 @@ func processNewHeifImage(imageBytes []byte, originalFileName string, conversionO
 // Takes an image file and processes the file based on environment or user parameters.
 // imageBytes represents a file send to the function. The function confirms the jpeg
 // data, parses the file, performs scale operations and save the data to the file system.
-func processNewImage(imageBytes []byte, originalFileName string, conversionOps []ConversionOp) (ImageOutputData, error) {
+func processNewImage(imageBytes []byte, originalFileName string, conversionOps []ConversionOp) (ImageConversionResult, error) {
 	imgDat, imageErr := makeImageDataFromBytes(imageBytes)
 
 	if imageErr != nil {
-		return ImageOutputData{}, imageErr
+		return ImageConversionResult{}, imageErr
 	}
 
 	return convertAndWriteImage(imgDat, originalFileName, conversionOps)
 }
 
-func convertAndWriteImage(imgDat imageData, originalFileName string, conversionOps []ConversionOp) (ImageOutputData, error) {
+func convertAndWriteImage(imgDat imageData, originalFileName string, conversionOps []ConversionOp) (ImageConversionResult, error) {
 	iw := MakeImageWriter(originalFileName, imgDat)
 	// iw.AddNewOp(makeOriginalOp())
 
@@ -142,7 +141,7 @@ func convertAndWriteImage(imgDat imageData, originalFileName string, conversionO
 	output, writeErr := iw.Commit()
 
 	if writeErr != nil {
-		return ImageOutputData{}, writeErr
+		return ImageConversionResult{}, writeErr
 	}
 
 	return output, nil

@@ -11,7 +11,7 @@ func (srv *ImageServer) SetRoutes() {
 	srv.GinEngine.GET("/images", srv.GetImagesByFirstPage)
 	srv.GinEngine.GET("/images/page/:page", srv.GetImagesByPage)
 
-	srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.PostAddImage)
+	srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.TestLoggedIn, srv.PostAddImage)
 	// srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.EnsureLoggedIn, srv.PostAddImage)
 	srv.GinEngine.POST("/edit-image", srv.PostEditImage)
 	srv.GinEngine.POST("/delete-image", srv.PostDeleteImage)
@@ -23,8 +23,13 @@ func (srv *ImageServer) SetMaxImageUploadSize(ctx *gin.Context) {
 	ctx.Next()
 }
 
+func (srv *ImageServer) TestLoggedIn(ctx *gin.Context) {
+	ctx.Set("userRole", "admin")
+	ctx.Set("userId", "1234567890")
+}
+
 func (srv *ImageServer) EnsureLoggedIn(ctx *gin.Context) {
-	_, role, getTokenErr := srv.GetTokenAndRoleFromHeader(ctx)
+	requestUser, getTokenErr := srv.GetRequestUserFromHeader(ctx)
 
 	// No Token Error
 	if getTokenErr != nil {
@@ -37,13 +42,16 @@ func (srv *ImageServer) EnsureLoggedIn(ctx *gin.Context) {
 	}
 
 	// Role Error
-	if !srv.CanEditImages(role) {
+	if !srv.CanEditImages(requestUser.Role) {
 		ctx.AbortWithStatusJSON(
 			http.StatusUnauthorized,
 			gin.H{"error": "not authorized"},
 		)
 		return
 	}
+
+	ctx.Set("userRole", requestUser.Role)
+	ctx.Set("userId", requestUser.Token.UID)
 
 	ctx.Next()
 }
