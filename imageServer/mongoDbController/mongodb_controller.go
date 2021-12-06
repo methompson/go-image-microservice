@@ -13,6 +13,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"methompson.com/image-microservice/imageServer/dbController"
+	"methompson.com/image-microservice/imageServer/imageConversion"
 	"methompson.com/image-microservice/imageServer/logging"
 )
 
@@ -44,11 +45,16 @@ func (mdbc *MongoDbController) initImageFileCollection(dbName string) error {
 			"imageSize",
 			"fileSize",
 			"private",
+			"imageType",
 		},
 		"properties": bson.M{
 			"formatName": bson.M{
 				"bsonType":    "string",
 				"description": "formatName must be a string",
+			},
+			"imageType": bson.M{
+				"bsonType":    "string",
+				"description": "imageType must be a string",
 			},
 			"filename": bson.M{
 				"bsonType":    "string",
@@ -130,8 +136,8 @@ func (mdbc *MongoDbController) initImageCollection(dbName string) error {
 				"bsonType":    "array",
 				"description": "imageIds must be an array",
 				"items": bson.M{
-					"bsonType":    "string",
-					"description": "imageIds Items must be string",
+					"bsonType":    "objectId",
+					"description": "imageIds Items must be ObjectId",
 				},
 			},
 			"authorId": bson.M{
@@ -153,21 +159,21 @@ func (mdbc *MongoDbController) initImageCollection(dbName string) error {
 		return dbController.NewDBError(createCollectionErr.Error())
 	}
 
-	models := []mongo.IndexModel{
-		{
-			Keys:    bson.M{"fileName": 1},
-			Options: options.Index().SetUnique(true),
-		},
-	}
+	// models := []mongo.IndexModel{
+	// 	{
+	// 		Keys:    bson.M{"fileName": 1},
+	// 		Options: options.Index().SetUnique(true),
+	// 	},
+	// }
 
-	opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
+	// opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
 
-	collection, _, _ := mdbc.getCollection(IMAGE_COLLECTION)
-	_, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
+	// collection, _, _ := mdbc.getCollection(IMAGE_COLLECTION)
+	// _, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
 
-	if setIndexErr != nil {
-		return dbController.NewDBError(setIndexErr.Error())
-	}
+	// if setIndexErr != nil {
+	// 	return dbController.NewDBError(setIndexErr.Error())
+	// }
 
 	return nil
 }
@@ -232,6 +238,21 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 	docs := make([]interface{}, 0)
 
 	for _, img := range doc.SizeFormats {
+		var imgType string
+
+		switch img.ImageType {
+		case imageConversion.Jpeg:
+			imgType = "jpeg"
+		case imageConversion.Png:
+			imgType = "png"
+		case imageConversion.Gif:
+			imgType = "gif"
+		case imageConversion.Bmp:
+			imgType = "bmp"
+		case imageConversion.Tiff:
+			imgType = "tiff"
+		}
+
 		docs = append(docs, bson.M{
 			"formatName": img.FormatName,
 			"filename":   img.Filename,
@@ -239,8 +260,9 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 				"width":  img.ImageSize.Width,
 				"height": img.ImageSize.Height,
 			},
-			"fileSize": img.FileSize,
-			"private":  img.Private,
+			"fileSize":  img.FileSize,
+			"private":   img.Private,
+			"imageType": imgType,
 		})
 	}
 
@@ -250,7 +272,8 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 		return "", dbController.NewDBError(fileInsertErr.Error())
 	}
 
-	imageIds := make([]string, 0)
+	// imageIds := make([]string, 0)
+	imageIds := make([]primitive.ObjectID, 0)
 
 	for _, result := range fileInsertResult.InsertedIDs {
 		id, idOk := result.(primitive.ObjectID)
@@ -260,7 +283,8 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 		}
 
 		// fmt.Println("id: " + id.Hex())
-		imageIds = append(imageIds, id.Hex())
+		// imageIds = append(imageIds, id.Hex())
+		imageIds = append(imageIds, id)
 	}
 
 	imgCollection, imgCtx, imgCancel := mdbc.getCollection(IMAGE_COLLECTION)
@@ -291,8 +315,123 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 	return objectId.Hex(), nil
 }
 
+func (mdbc *MongoDbController) GetImageDataAggregationStages() (projectStage, authorLookupStage, imageFileLookupStage bson.D) {
+	projectStage = bson.D{
+		{
+			Key: "$project", Value: bson.M{
+				"title":     1,
+				"fileName":  1,
+				"idName":    1,
+				"tags":      1,
+				"imageIds":  1,
+				"authorId":  1,
+				"dateAdded": 1,
+			},
+		},
+	}
+
+	authorLookupStage = bson.D{{
+		Key: "$lookup",
+		Value: bson.M{
+			"from":         USER_COLLECTION,
+			"localField":   "authorId",
+			"foreignField": "uid",
+			"as":           "author",
+		},
+	}}
+
+	imageFileLookupStage = bson.D{
+		{
+			Key: "$lookup",
+			Value: bson.M{
+				"from":         IMAGE_FILE_COLLECTION,
+				"localField":   "imageIds",
+				"foreignField": "_id",
+				"as":           "images",
+			},
+		},
+	}
+
+	return
+}
+
+func (mdbc *MongoDbController) GetImageByName(name string) (imgDoc dbController.ImageFileDocument, err error) {
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
+	defer cancel()
+
+	var result ImageFileDocResult
+
+	findErr := collection.FindOne(ctx, bson.M{
+		"filename": name,
+	}).Decode(&result)
+
+	if findErr != nil {
+		err = findErr
+		return
+	}
+
+	return result.getImageFileDocument(), nil
+}
+
 func (mdbc *MongoDbController) GetImageDataById(id string) (imgDoc dbController.ImageDocument, err error) {
-	return imgDoc, errors.New("Unimplemented")
+	idObj, idObjErr := primitive.ObjectIDFromHex(id)
+
+	if idObjErr != nil {
+		err = dbController.NewInvalidInputError("invalid id")
+		return
+	}
+
+	matchStage := bson.D{
+		{
+			Key: "$match",
+			Value: bson.M{
+				"_id": idObj,
+			},
+		},
+	}
+
+	return mdbc.GetImageDataWithMatcher(matchStage)
+}
+
+func (mdbc *MongoDbController) GetImageDataWithMatcher(matchStage bson.D) (imgDoc dbController.ImageDocument, err error) {
+	projectStage, authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
+
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
+	defer cancel()
+
+	limitStage := bson.D{{
+		Key:   "$limit",
+		Value: int32(1),
+	}}
+
+	cursor, aggErr := collection.Aggregate(ctx, mongo.Pipeline{
+		matchStage,
+		projectStage,
+		limitStage,
+		authorLookupStage,
+		imageFileLookupStage,
+	})
+
+	if aggErr != nil {
+		err = dbController.NewDBError("error getting data from database: " + aggErr.Error())
+		return
+	}
+
+	var results []ImageDocResult
+
+	if allErr := cursor.All(ctx, &results); allErr != nil {
+		err = dbController.NewDBError("error parsing results: " + allErr.Error())
+		return
+	}
+
+	if len(results) < 1 {
+		err = dbController.NewNoResultsError("")
+		return
+	}
+
+	imgDoc = results[0].GetImageDocument()
+
+	return
 }
 
 func (mdbc *MongoDbController) GetImagesData(page int, pagination int) ([]dbController.ImageDocument, error) {

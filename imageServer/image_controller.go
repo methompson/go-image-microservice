@@ -2,6 +2,7 @@ package imageServer
 
 import (
 	"fmt"
+	"path"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,16 +50,42 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 		DateAdded:   time.Now(),
 	}
 
-	// imageConversion.RollBackWrites(output)
-
 	fmt.Println(output.OriginalFileName)
 	fmt.Println(addImgDoc.AuthorId)
 
 	_, addImageErr := (*ic.DBController).AddImageData(addImgDoc)
 
 	if addImageErr != nil {
+		// TODO Rollback database writes
+		imageConversion.RollBackWrites(output)
 		return addImageErr
 	}
 
 	return nil
+}
+
+func (ic *ImageController) GetImageByName(ctx *gin.Context) (filepath string, imgDoc dbController.ImageFileDocument, err error) {
+	name := ctx.Param("imageName")
+
+	fmt.Println(name)
+
+	img, imgErr := (*ic.DBController).GetImageByName(name)
+
+	if imgErr != nil {
+		err = imgErr
+		return
+	}
+
+	filename := img.Filename
+	// Make a file path from the file name
+	filepath = path.Join(imageConversion.GetImagePath(filename), filename)
+	imgDoc = img
+
+	return
+}
+
+func (ic *ImageController) GetImageDataById(id string) (doc dbController.ImageDocument, err error) {
+	doc, err = (*ic.DBController).GetImageDataById(id)
+
+	return
 }

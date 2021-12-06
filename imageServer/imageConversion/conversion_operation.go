@@ -42,12 +42,12 @@ type ConversionRequest struct {
 type ImageType int8
 
 const (
-	Jpeg ImageType = iota
+	Same ImageType = iota
+	Jpeg
 	Png
 	Gif
 	Bmp
 	Tiff
-	Same
 )
 
 type ResizeOp int8

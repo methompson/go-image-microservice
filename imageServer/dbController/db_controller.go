@@ -8,8 +8,12 @@ type DatabaseController interface {
 	InitDatabase() error
 
 	AddImageData(doc AddImageDocument) (id string, err error)
+
+	GetImageByName(id string) (ImageFileDocument, error)
+
 	GetImageDataById(id string) (ImageDocument, error)
 	GetImagesData(page int, pagination int) ([]ImageDocument, error)
+
 	EditImageData(doc EditImageDocument) error
 	DeleteImageData(doc DeleteImageDocument) error
 

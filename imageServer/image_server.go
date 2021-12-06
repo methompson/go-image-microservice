@@ -10,7 +10,6 @@ import (
 	"time"
 
 	firebase "firebase.google.com/go/v4"
-	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
 	"google.golang.org/api/option"
 
@@ -249,76 +248,25 @@ func (srv *ImageServer) StartServer() {
 	srv.GinEngine.Run()
 }
 
-func (srv *ImageServer) ValidateIdToken(header AuthorizationHeader) (*auth.Token, error) {
-	ctx := context.Background()
-	client, clientErr := srv.FirebaseApp.Auth(ctx)
+// func (srv *ImageServer) GetRequestUserFromHeader(ctx *gin.Context) (RequestUserData, error) {
+// 	token, tokenErr := srv.GetAuthorizationHeader(ctx)
 
-	if clientErr != nil {
-		fmt.Println(clientErr)
-		return nil, clientErr
-	}
+// 	// No Token Error
+// 	if tokenErr != nil {
+// 		return RequestUserData{}, tokenErr
+// 	}
 
-	token, tokenErr := client.VerifyIDToken(ctx, header.Token)
+// 	role, roleErr := srv.GetRoleFromToken(token)
 
-	if tokenErr != nil {
-		fmt.Println(tokenErr)
-		return nil, tokenErr
-	}
+// 	if roleErr != nil {
+// 		return RequestUserData{}, roleErr
+// 	}
 
-	return token, nil
-}
-
-func (srv *ImageServer) GetAuthorizationHeader(ctx *gin.Context) (*auth.Token, error) {
-	var header AuthorizationHeader
-
-	// No Token Error
-	if headerErr := ctx.ShouldBindHeader(&header); headerErr != nil {
-		fmt.Println(headerErr)
-		ctx.Data(401, "text/html; charset=utf-8", make([]byte, 0))
-		return nil, headerErr
-	}
-
-	token, tokenErr := srv.ValidateIdToken(header)
-
-	if tokenErr != nil {
-		return nil, tokenErr
-	}
-
-	return token, nil
-}
-
-func (srv *ImageServer) GetRoleFromToken(token *auth.Token) (string, error) {
-	roleInt := token.Claims["role"]
-
-	role, ok := roleInt.(string)
-
-	if !ok {
-		fmt.Println(role)
-		return "", errors.New("role is not a string")
-	}
-
-	return role, nil
-}
-
-func (srv *ImageServer) GetRequestUserFromHeader(ctx *gin.Context) (RequestUserData, error) {
-	token, tokenErr := srv.GetAuthorizationHeader(ctx)
-
-	// No Token Error
-	if tokenErr != nil {
-		return RequestUserData{}, tokenErr
-	}
-
-	role, roleErr := srv.GetRoleFromToken(token)
-
-	if roleErr != nil {
-		return RequestUserData{}, roleErr
-	}
-
-	return RequestUserData{
-		Token: token,
-		Role:  role,
-	}, nil
-}
+// 	return RequestUserData{
+// 		Token: token,
+// 		Role:  role,
+// 	}, nil
+// }
 
 func (srv *ImageServer) CanEditImages(role string) bool {
 	return role == constants.USER_ADMIN || role == constants.USER_EDITOR

@@ -9,6 +9,15 @@ type ImageSize struct {
 	Height int
 }
 
+func (is ImageSize) GetMap() map[string]interface{} {
+	size := make(map[string]interface{})
+
+	size["width"] = is.Width
+	size["height"] = is.Height
+
+	return size
+}
+
 func GetImageSize(imgData *image.Image) ImageSize {
 	bounds := (*imgData).Bounds()
 
@@ -30,15 +39,29 @@ type ImageSizeFormat struct {
 	ImageSize  ImageSize
 	FileSize   int
 	Private    bool
+	ImageType  ImageType
 }
 
-func MakeImageSizeFormat(filename string, fileSize int, imageSize ImageSize, imgOp ConversionOp) ImageSizeFormat {
+func (isf ImageSizeFormat) GetMap() map[string]interface{} {
+	m := make(map[string]interface{})
+
+	m["filename"] = isf.Filename
+	m["fileSize"] = isf.FileSize
+	m["private"] = isf.Private
+	m["formatName"] = isf.FormatName
+	m["imageSize"] = isf.ImageSize.GetMap()
+
+	return m
+}
+
+func MakeImageSizeFormat(filename string, fileSize int, imageSize ImageSize, imgOp ConversionOp, imgType ImageType) ImageSizeFormat {
 	return ImageSizeFormat{
 		FormatName: imgOp.Suffix,
 		Filename:   filename,
 		ImageSize:  imageSize,
 		FileSize:   fileSize,
 		Private:    imgOp.Private,
+		ImageType:  imgType,
 	}
 }
 

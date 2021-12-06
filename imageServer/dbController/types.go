@@ -32,19 +32,62 @@ type AddImageDocument struct {
 	DateAdded   time.Time
 }
 
+// An image file result for when a user is accessing JUST an image file
+type ImageFileDocument struct {
+	Id         string
+	Filename   string
+	FormatName string
+	ImageSize  imageConversion.ImageSize
+	FileSize   int
+	Private    bool
+	ImageType  imageConversion.ImageType
+}
+
+func (ifd ImageFileDocument) GetMimeType() string {
+	var mimeType string
+
+	switch ifd.ImageType {
+	case imageConversion.Jpeg:
+		mimeType = "image/jpeg"
+	case imageConversion.Png:
+		mimeType = "image/png"
+	case imageConversion.Gif:
+		mimeType = "image/gif"
+	case imageConversion.Bmp:
+		mimeType = "image/bmp"
+	case imageConversion.Tiff:
+		mimeType = "image/tiff"
+	default:
+		mimeType = "application/octet-stream"
+	}
+
+	return mimeType
+}
+
+func (ifd ImageFileDocument) GetMap() map[string]interface{} {
+	m := make(map[string]interface{})
+
+	m["id"] = ifd.Id
+	m["filename"] = ifd.Filename
+	m["fileSize"] = ifd.FileSize
+	m["private"] = ifd.Private
+	m["formatName"] = ifd.FormatName
+	m["imageSize"] = ifd.ImageSize.GetMap()
+	m["imageType"] = ifd.GetMimeType()
+
+	return m
+}
+
 type ImageDocument struct {
-	Id             string
-	Title          string
-	FileName       string
-	IdName         string
-	Tags           []string
-	SizeFormats    []imageConversion.ImageSizeFormat
-	Author         string
-	AuthorId       string
-	DateAdded      time.Time
-	UpdateAuthor   string
-	UpdateAuthorId string
-	DateUpdated    time.Time
+	Id         string
+	Title      string
+	FileName   string
+	IdName     string
+	Tags       []string
+	ImageFiles []ImageFileDocument
+	Author     string
+	AuthorId   string
+	DateAdded  time.Time
 }
 
 func (bd *ImageDocument) GetMap() map[string]interface{} {
@@ -57,9 +100,6 @@ func (bd *ImageDocument) GetMap() map[string]interface{} {
 	m["author"] = bd.Author
 	m["authorId"] = bd.AuthorId
 	m["dateAdded"] = bd.DateAdded.Unix()
-	m["updateAuthor"] = bd.UpdateAuthor
-	m["updateAuthorId"] = bd.UpdateAuthorId
-	m["dateUpdated"] = bd.DateUpdated.Unix()
 
 	if bd.Tags != nil {
 		m["tags"] = bd.Tags
@@ -67,24 +107,13 @@ func (bd *ImageDocument) GetMap() map[string]interface{} {
 		m["tags"] = make([]string, 0)
 	}
 
-	sizeFormats := make([]map[string]interface{}, 0)
+	imageFiles := make([]map[string]interface{}, 0)
 
-	for _, loc := range bd.SizeFormats {
-		locVal := make(map[string]interface{})
-
-		locVal["filename"] = loc.Filename
-		locVal["fileSize"] = loc.FileSize
-		locVal["private"] = loc.Private
-
-		size := make(map[string]interface{})
-		size["width"] = loc.ImageSize.Width
-		size["height"] = loc.ImageSize.Height
-		locVal["imageSize"] = size
-
-		sizeFormats = append(sizeFormats, locVal)
+	for _, format := range bd.ImageFiles {
+		imageFiles = append(imageFiles, format.GetMap())
 	}
 
-	m["sizeFormats"] = sizeFormats
+	m["imageFiles"] = imageFiles
 
 	return m
 }

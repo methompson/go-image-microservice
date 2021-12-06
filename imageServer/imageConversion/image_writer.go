@@ -179,7 +179,14 @@ func (iw *ImageWriter) writeNewFile(imgOp ConversionOp, name string) (ImageSizeF
 		return ImageSizeFormat{}, writeErr
 	}
 
-	imgSizeF := MakeImageSizeFormat(filename, len(bytes), imgSize, imgOp)
+	var imgType ImageType
+	if imgOp.CompressTo == Same {
+		imgType = iw.imageData.OriginalImageType
+	} else {
+		imgType = imgOp.CompressTo
+	}
+
+	imgSizeF := MakeImageSizeFormat(filename, len(bytes), imgSize, imgOp, imgType)
 
 	return imgSizeF, nil
 }

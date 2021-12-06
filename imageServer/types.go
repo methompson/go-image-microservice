@@ -4,8 +4,6 @@ import (
 	"os"
 	"time"
 
-	"firebase.google.com/go/v4/auth"
-
 	"methompson.com/image-microservice/imageServer/constants"
 	"methompson.com/image-microservice/imageServer/dbController"
 	"methompson.com/image-microservice/imageServer/imageConversion"
@@ -13,10 +11,6 @@ import (
 
 func DebugMode() bool {
 	return os.Getenv(constants.GIN_MODE) != "release"
-}
-
-type AuthorizationHeader struct {
-	Token string `header:"authorization" binding:"required"`
 }
 
 type AddImageBody struct {
@@ -106,9 +100,4 @@ func GetDefaultImageFormMetaData() AddImageFormData {
 		Tags:       make([]string, 0),
 		Operations: make([]imageConversion.ConversionRequest, 0),
 	}
-}
-
-type RequestUserData struct {
-	Token *auth.Token
-	Role  string
 }
