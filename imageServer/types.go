@@ -101,3 +101,16 @@ func GetDefaultImageFormMetaData() AddImageFormData {
 		Operations: make([]imageConversion.ConversionRequest, 0),
 	}
 }
+
+type SortType int8
+
+const (
+	Name SortType = iota
+	NameReverse
+	DateAdded
+	DateAddedReverse
+)
+
+type ImageFilterSort struct {
+	SortBy SortType
+}

@@ -434,8 +434,59 @@ func (mdbc *MongoDbController) GetImageDataWithMatcher(matchStage bson.D) (imgDo
 	return
 }
 
-func (mdbc *MongoDbController) GetImagesData(page int, pagination int) ([]dbController.ImageDocument, error) {
-	return nil, errors.New("Unimplemented")
+func (mdbc *MongoDbController) GetImagesData(page int, pagination int) (imgDocs []dbController.ImageDocument, err error) {
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
+	defer cancel()
+
+	matchStage := bson.D{{Key: "$match", Value: bson.M{}}}
+
+	projectStage, authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
+
+	sortStage := bson.D{{
+		Key: "$sort",
+		Value: bson.M{
+			"dateAdded": -1,
+		},
+	}}
+
+	limitStage := bson.D{{
+		Key:   "$limit",
+		Value: int32(pagination),
+	}}
+
+	skipStage := bson.D{{
+		Key:   "$skip",
+		Value: int64((page - 1) * pagination),
+	}}
+
+	cursor, aggErr := collection.Aggregate(ctx, mongo.Pipeline{
+		matchStage,
+		projectStage,
+		sortStage,
+		skipStage,
+		limitStage,
+		authorLookupStage,
+		imageFileLookupStage,
+	})
+
+	if aggErr != nil {
+		err = aggErr
+		return
+	}
+
+	var results []ImageDocResult
+	if allErr := cursor.All(ctx, &results); allErr != nil {
+		err = errors.New("error parsing results")
+		return
+	}
+
+	imgDocs = make([]dbController.ImageDocument, 0)
+
+	for _, r := range results {
+		imgDocs = append(imgDocs, r.GetImageDocument())
+	}
+
+	return
 }
 
 func (mdbc *MongoDbController) EditImageData(doc dbController.EditImageDocument) error {

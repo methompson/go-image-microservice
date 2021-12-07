@@ -64,6 +64,17 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 	return nil
 }
 
+func (ic *ImageController) GetImages(page, paginationNum int) (docs []dbController.ImageDocument, err error) {
+	var _pagination int
+	if paginationNum <= 0 {
+		_pagination = 50
+	} else {
+		_pagination = paginationNum
+	}
+	docs, err = (*ic.DBController).GetImagesData(page, _pagination)
+	return
+}
+
 func (ic *ImageController) GetImageByName(ctx *gin.Context) (filepath string, imgDoc dbController.ImageFileDocument, err error) {
 	name := ctx.Param("imageName")
 

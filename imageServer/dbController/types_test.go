@@ -10,37 +10,42 @@ import (
 func TestImageLocGetMap(t *testing.T) {
 	is1 := imageConversion.ImageSize{Width: 300, Height: 200}
 
-	isf1 := imageConversion.ImageSizeFormat{
-		Filename:  "Test Size",
-		FileSize:  128,
-		ImageSize: is1,
-		Private:   true,
+	ifd1 := ImageFileDocument{
+		Id:         "id-1234",
+		Filename:   "Test Size",
+		FormatName: "image 1",
+		FileSize:   128,
+		ImageSize:  is1,
+		Private:    true,
+		ImageType:  imageConversion.Jpeg,
 	}
 
 	is2 := imageConversion.ImageSize{Width: 640, Height: 480}
 
-	isf2 := imageConversion.ImageSizeFormat{
-		Filename:  "Test Size Larger",
-		FileSize:  256,
-		ImageSize: is2,
-		Private:   false,
+	ifd2 := ImageFileDocument{
+		Id:         "id-4567",
+		Filename:   "Test Size Larger",
+		FormatName: "image 2",
+		FileSize:   256,
+		ImageSize:  is2,
+		Private:    false,
+		ImageType:  imageConversion.Jpeg,
 	}
 
-	formats := make([]imageConversion.ImageSizeFormat, 0)
-	formats = append(formats, isf1)
-	formats = append(formats, isf2)
+	files := make([]ImageFileDocument, 0)
+	files = append(files, ifd1)
+	files = append(files, ifd2)
 
 	imgDoc := ImageDocument{
-		Id:             "123",
-		Title:          "test",
-		FileName:       "test.jpg",
-		SizeFormats:    formats,
-		Author:         "Test Author",
-		AuthorId:       "456",
-		DateAdded:      time.Now(),
-		UpdateAuthor:   "Test Update Author",
-		UpdateAuthorId: "789",
-		DateUpdated:    time.UnixMilli(0),
+		Id:         "123",
+		Title:      "test",
+		FileName:   "test.jpg",
+		IdName:     "id name",
+		Tags:       make([]string, 0),
+		ImageFiles: files,
+		Author:     "Test Author",
+		AuthorId:   "456",
+		DateAdded:  time.Now(),
 	}
 
 	interfaceData := imgDoc.GetMap()
@@ -49,13 +54,13 @@ func TestImageLocGetMap(t *testing.T) {
 		t.Fatalf("id = '%v', Should be '123'", interfaceData["id"])
 	}
 
-	sizeFormats := interfaceData["sizeFormats"].([]map[string]interface{})
+	imageFiles := interfaceData["imageFiles"].([]map[string]interface{})
 
-	if len(sizeFormats) != 2 {
-		t.Fatalf("len(v) = '%v', Should be '2'", len(sizeFormats))
+	if len(imageFiles) != 2 {
+		t.Fatalf("len(v) = '%v', Should be '2'", len(imageFiles))
 	}
 
-	format1 := sizeFormats[0]
+	format1 := imageFiles[0]
 
 	if format1["filename"] != "Test Size" {
 		t.Fatalf("format1[\"filename\"] = '%v', Should be 'Test Size'", format1["filename"])
@@ -77,7 +82,7 @@ func TestImageLocGetMap(t *testing.T) {
 		t.Fatalf("imageSize1[\"height\"] = '%v', Should be '200'", imageSize1["height"])
 	}
 
-	imageInfo2 := sizeFormats[1]
+	imageInfo2 := imageFiles[1]
 
 	if imageInfo2["filename"] != "Test Size Larger" {
 		t.Fatalf("imageInfo2[\"filename\"] = '%v', Should be 'Test Size Larger'", imageInfo2["filename"])

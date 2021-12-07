@@ -2,6 +2,7 @@ package imageServer
 
 import (
 	"net/http"
+	"strconv"
 
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,7 @@ func (srv *ImageServer) SetRoutes() {
 	srv.GinEngine.GET("/image/:imageName", srv.GetImageByName)
 
 	// /images/id/:imageId will serve information about an image.
-	srv.GinEngine.GET("/images/id/:imageId", srv.TestLoggedIn, srv.GetImagesById)
+	srv.GinEngine.GET("/image/id/:imageId", srv.TestLoggedIn, srv.GetImageById)
 
 	// /images and /images/page/:page will serve pagination information about images
 	srv.GinEngine.GET("/images", srv.GetImagesByFirstPage)
@@ -105,24 +106,71 @@ func (srv *ImageServer) EnsureLoggedIn(ctx *gin.Context) {
 	ctx.Next()
 }
 
-func (srv *ImageServer) GetImages(ctx *gin.Context) {
-	ctx.JSON(
-		http.StatusOK,
-		gin.H{},
-	)
-}
-
 func (srv *ImageServer) GetImagesByFirstPage(ctx *gin.Context) {
-	ctx.JSON(
-		http.StatusOK,
-		gin.H{},
-	)
+	srv.GetImages(ctx, 1)
 }
 
 func (srv *ImageServer) GetImagesByPage(ctx *gin.Context) {
+	page := ctx.Param("page")
+
+	// Not sure this will ever happen
+	if len(page) == 0 {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": "invalid page number",
+			},
+		)
+
+		return
+	}
+
+	pageNum, pageNumErr := strconv.Atoi(page)
+
+	if pageNumErr != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": "invalid page number",
+			},
+		)
+
+		return
+	}
+
+	srv.GetImages(ctx, pageNum)
+}
+
+// TODO start defining filters that users can pass via query parameters
+func (srv *ImageServer) GetImages(ctx *gin.Context, page int) {
+	pagination := ctx.Query("pagination")
+
+	paginationNum, paginationNumErr := strconv.Atoi(pagination)
+	if paginationNumErr != nil {
+		paginationNum = -1
+	}
+
+	images, err := srv.ImageController.GetImages(page, paginationNum)
+
+	if err != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": err.Error(),
+			},
+		)
+		return
+	}
+
+	output := make([]map[string]interface{}, 0)
+
+	for _, val := range images {
+		output = append(output, val.GetMap())
+	}
+
 	ctx.JSON(
 		http.StatusOK,
-		gin.H{},
+		output,
 	)
 }
 
@@ -131,7 +179,7 @@ func (srv *ImageServer) GetImageByName(ctx *gin.Context) {
 
 	// TODO abstract if images can be seen
 	if fileErr != nil || !canViewImage(ctx, imgDoc) {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusNotFound,
 			gin.H{
 				"error": "file not found",
@@ -161,7 +209,7 @@ func canViewImage(ctx *gin.Context, imgDoc dbController.ImageFileDocument) bool 
 	return len(token) > 0
 }
 
-func (srv *ImageServer) GetImagesById(ctx *gin.Context) {
+func (srv *ImageServer) GetImageById(ctx *gin.Context) {
 	id := ctx.Param("imageId")
 
 	// Not sure this will ever happen
@@ -179,7 +227,7 @@ func (srv *ImageServer) GetImagesById(ctx *gin.Context) {
 	doc, err := srv.ImageController.GetImageDataById(id)
 
 	if err != nil {
-		ctx.JSON(
+		ctx.AbortWithStatusJSON(
 			http.StatusNotFound,
 			gin.H{},
 		)
