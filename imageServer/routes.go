@@ -289,7 +289,17 @@ func (srv *ImageServer) PostDeleteImage(ctx *gin.Context) {
 		return
 	}
 
-	srv.ImageController.DeleteImageDocument(body.GetImageDocument())
+	err := srv.ImageController.DeleteImageDocument(body.GetImageDocument())
+
+	if err != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": err.Error(),
+			},
+		)
+		return
+	}
 
 	ctx.JSON(
 		http.StatusOK,

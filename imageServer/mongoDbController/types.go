@@ -90,7 +90,6 @@ type ImageDocResult struct {
 	FileName  string               `bson:"fileName"`
 	IdName    string               `bson:"idName"`
 	Images    []ImageFileDocResult `bson:"images"`
-	ImageIds  []string             `bson:"imageIds"`
 	Tags      []string             `bson:"tags"`
 	Author    []UserDocResult      `bson:"author"`
 	AuthorId  string               `bson:"authorId"`
