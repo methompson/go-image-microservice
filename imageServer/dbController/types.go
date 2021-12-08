@@ -132,3 +132,7 @@ type EditImageDocument struct {
 type DeleteImageDocument struct {
 	Id string
 }
+
+type DeleteImageFileDocument struct {
+	Id string
+}

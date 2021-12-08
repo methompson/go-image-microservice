@@ -248,26 +248,6 @@ func (srv *ImageServer) StartServer() {
 	srv.GinEngine.Run()
 }
 
-// func (srv *ImageServer) GetRequestUserFromHeader(ctx *gin.Context) (RequestUserData, error) {
-// 	token, tokenErr := srv.GetAuthorizationHeader(ctx)
-
-// 	// No Token Error
-// 	if tokenErr != nil {
-// 		return RequestUserData{}, tokenErr
-// 	}
-
-// 	role, roleErr := srv.GetRoleFromToken(token)
-
-// 	if roleErr != nil {
-// 		return RequestUserData{}, roleErr
-// 	}
-
-// 	return RequestUserData{
-// 		Token: token,
-// 		Role:  role,
-// 	}, nil
-// }
-
 func (srv *ImageServer) CanEditImages(role string) bool {
 	return role == constants.USER_ADMIN || role == constants.USER_EDITOR
 }

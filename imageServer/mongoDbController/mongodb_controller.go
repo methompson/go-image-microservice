@@ -29,9 +29,9 @@ type MongoDbController struct {
 func (mdbc *MongoDbController) getCollection(collectionName string) (*mongo.Collection, context.Context, context.CancelFunc) {
 	// Write the hash to the database
 	collection := mdbc.MongoClient.Database(mdbc.dbName).Collection(collectionName)
-	backCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
-	return collection, backCtx, cancel
+	return collection, ctx, cancel
 }
 
 func (mdbc *MongoDbController) initImageFileCollection(dbName string) error {
@@ -159,21 +159,21 @@ func (mdbc *MongoDbController) initImageCollection(dbName string) error {
 		return dbController.NewDBError(createCollectionErr.Error())
 	}
 
-	// models := []mongo.IndexModel{
-	// 	{
-	// 		Keys:    bson.M{"fileName": 1},
-	// 		Options: options.Index().SetUnique(true),
-	// 	},
-	// }
+	models := []mongo.IndexModel{
+		{
+			Keys:    bson.M{"idName": 1},
+			Options: options.Index().SetUnique(true),
+		},
+	}
 
-	// opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
+	opts := options.CreateIndexes().SetMaxTime(2 * time.Second)
 
-	// collection, _, _ := mdbc.getCollection(IMAGE_COLLECTION)
-	// _, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
+	collection, _, _ := mdbc.getCollection(IMAGE_COLLECTION)
+	_, setIndexErr := collection.Indexes().CreateMany(context.TODO(), models, opts)
 
-	// if setIndexErr != nil {
-	// 	return dbController.NewDBError(setIndexErr.Error())
-	// }
+	if setIndexErr != nil {
+		return dbController.NewDBError(setIndexErr.Error())
+	}
 
 	return nil
 }
@@ -232,87 +232,109 @@ func (mdbc *MongoDbController) InitDatabase() error {
 }
 
 func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (string, error) {
-	imgFileCollection, ifCtx, ifCancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
-	defer ifCancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	docs := make([]interface{}, 0)
+	imgFileCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_FILE_COLLECTION)
+	imgCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_COLLECTION)
 
-	for _, img := range doc.SizeFormats {
-		var imgType string
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		docs := make([]interface{}, 0)
 
-		switch img.ImageType {
-		case imageConversion.Jpeg:
-			imgType = "jpeg"
-		case imageConversion.Png:
-			imgType = "png"
-		case imageConversion.Gif:
-			imgType = "gif"
-		case imageConversion.Bmp:
-			imgType = "bmp"
-		case imageConversion.Tiff:
-			imgType = "tiff"
+		for _, img := range doc.SizeFormats {
+			var imgType string
+
+			switch img.ImageType {
+			case imageConversion.Jpeg:
+				imgType = "jpeg"
+			case imageConversion.Png:
+				imgType = "png"
+			case imageConversion.Gif:
+				imgType = "gif"
+			case imageConversion.Bmp:
+				imgType = "bmp"
+			case imageConversion.Tiff:
+				imgType = "tiff"
+			}
+
+			docs = append(docs, bson.M{
+				"formatName": img.FormatName,
+				"filename":   img.Filename,
+				"imageSize": bson.M{
+					"width":  img.ImageSize.Width,
+					"height": img.ImageSize.Height,
+				},
+				"fileSize":  img.FileSize,
+				"private":   img.Private,
+				"imageType": imgType,
+			})
 		}
 
-		docs = append(docs, bson.M{
-			"formatName": img.FormatName,
-			"filename":   img.Filename,
-			"imageSize": bson.M{
-				"width":  img.ImageSize.Width,
-				"height": img.ImageSize.Height,
-			},
-			"fileSize":  img.FileSize,
-			"private":   img.Private,
-			"imageType": imgType,
-		})
-	}
+		fileInsertResult, fileInsertErr := imgFileCollection.InsertMany(sessCtx, docs)
 
-	fileInsertResult, fileInsertErr := imgFileCollection.InsertMany(ifCtx, docs)
-
-	if fileInsertErr != nil {
-		return "", dbController.NewDBError(fileInsertErr.Error())
-	}
-
-	// imageIds := make([]string, 0)
-	imageIds := make([]primitive.ObjectID, 0)
-
-	for _, result := range fileInsertResult.InsertedIDs {
-		id, idOk := result.(primitive.ObjectID)
-		if !idOk {
-			fmt.Println("Id not OK")
-			continue
+		if fileInsertErr != nil {
+			return "", dbController.NewDBError(fileInsertErr.Error())
 		}
 
-		// fmt.Println("id: " + id.Hex())
-		// imageIds = append(imageIds, id.Hex())
-		imageIds = append(imageIds, id)
+		// imageIds := make([]string, 0)
+		imageIds := make([]primitive.ObjectID, 0)
+
+		for _, result := range fileInsertResult.InsertedIDs {
+			id, idOk := result.(primitive.ObjectID)
+			if !idOk {
+				fmt.Println("Id not OK")
+				continue
+			}
+
+			// fmt.Println("id: " + id.Hex())
+			// imageIds = append(imageIds, id.Hex())
+			imageIds = append(imageIds, id)
+		}
+
+		col := bson.M{
+			"title":     doc.Title,
+			"fileName":  doc.FileName,
+			"idName":    doc.IdName,
+			"tags":      doc.Tags,
+			"imageIds":  imageIds,
+			"authorId":  doc.AuthorId,
+			"dateAdded": primitive.Timestamp{T: uint32(doc.DateAdded.Unix())},
+		}
+
+		colInsertResult, colInsertErr := imgCollection.InsertOne(sessCtx, col)
+
+		if colInsertErr != nil {
+			return "", dbController.NewDBError(colInsertErr.Error())
+		}
+
+		if objectId, idOk := colInsertResult.InsertedID.(primitive.ObjectID); idOk {
+			return objectId.Hex(), nil
+		} else {
+			return "", dbController.NewDBError("invalid id returned by database")
+		}
 	}
 
-	imgCollection, imgCtx, imgCancel := mdbc.getCollection(IMAGE_COLLECTION)
-	defer imgCancel()
+	session, sessionErr := mdbc.MongoClient.StartSession()
 
-	col := bson.M{
-		"title":     doc.Title,
-		"fileName":  doc.FileName,
-		"idName":    doc.IdName,
-		"tags":      doc.Tags,
-		"imageIds":  imageIds,
-		"authorId":  doc.AuthorId,
-		"dateAdded": primitive.Timestamp{T: uint32(doc.DateAdded.Unix())},
+	if sessionErr != nil {
+		return "", sessionErr
+	}
+	defer session.EndSession(ctx)
+
+	result, transErr := session.WithTransaction(ctx, callback)
+
+	if transErr != nil {
+		session.AbortTransaction(ctx)
+		return "", transErr
 	}
 
-	colInsertResult, colInsertErr := imgCollection.InsertOne(imgCtx, col)
+	fmt.Printf("result %v\n", result)
 
-	if colInsertErr != nil {
-		return "", dbController.NewDBError(colInsertErr.Error())
+	if id, ok := result.(string); ok {
+		return id, nil
+	} else {
+		return "", errors.New("invalid database response")
 	}
-
-	objectId, idOk := colInsertResult.InsertedID.(primitive.ObjectID)
-
-	if !idOk {
-		return "", dbController.NewDBError("invalid id returned by database")
-	}
-
-	return objectId.Hex(), nil
 }
 
 func (mdbc *MongoDbController) GetImageDataAggregationStages() (projectStage, authorLookupStage, imageFileLookupStage bson.D) {
@@ -493,12 +515,89 @@ func (mdbc *MongoDbController) EditImageData(doc dbController.EditImageDocument)
 	return errors.New("Unimplemented")
 }
 
-func (mdbc *MongoDbController) DeleteImageData(doc dbController.DeleteImageDocument) error {
+func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument) error {
+	imgDoc, imgErr := mdbc.GetImageDataById(doc.Id)
+
+	if imgErr != nil {
+		return imgErr
+	}
+
+	docId, docIdErr := primitive.ObjectIDFromHex(imgDoc.Id)
+	if docIdErr != nil {
+		return docIdErr
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	imgFileCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_FILE_COLLECTION)
+	imgCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_COLLECTION)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		fileIds := make([]primitive.ObjectID, 0)
+
+		for _, imgFile := range imgDoc.ImageFiles {
+			idObj, idObjErr := primitive.ObjectIDFromHex(imgFile.Id)
+			if idObjErr != nil {
+				continue
+			}
+
+			fileIds = append(fileIds, idObj)
+		}
+
+		_, fErr := imgFileCollection.DeleteMany(sessCtx, bson.M{
+			"_id": bson.M{
+				"$in": fileIds,
+			},
+		})
+
+		if fErr != nil {
+			return nil, fErr
+		}
+
+		_, iErr := imgCollection.DeleteOne(sessCtx, bson.M{
+			"_id": docId,
+		})
+
+		if iErr != nil {
+			return nil, iErr
+		}
+
+		// db.inventory.deleteMany({
+		// 	_id: {$in: [
+		// 		ObjectId("61b0b36bf060f8f6ec5eda1d"),
+		// 		ObjectId("61b0b36bf060f8f6ec5eda1e"),
+		// 	]},
+		// })
+
+		return nil, nil
+	}
+
+	session, sessionErr := mdbc.MongoClient.StartSession()
+
+	if sessionErr != nil {
+		return sessionErr
+	}
+	defer session.EndSession(ctx)
+
+	result, transErr := session.WithTransaction(ctx, callback)
+
+	if transErr != nil {
+		session.AbortTransaction(ctx)
+		return transErr
+	}
+
+	fmt.Printf("result %v\n", result)
+
+	return nil
+}
+
+func (mdbc *MongoDbController) DeleteImageFile(doc dbController.DeleteImageFileDocument) error {
 	return errors.New("Unimplemented")
 }
 
 func (mdbc *MongoDbController) AddRequestLog(log logging.RequestLogData) error {
-	collection, backCtx, cancel := mdbc.getCollection(LOGGING_COLLECTION)
+	collection, ctx, cancel := mdbc.getCollection(LOGGING_COLLECTION)
 	defer cancel()
 
 	insert := bson.M{
@@ -514,7 +613,7 @@ func (mdbc *MongoDbController) AddRequestLog(log logging.RequestLogData) error {
 		"errorMessage": log.ErrorMessage,
 	}
 
-	_, mdbErr := collection.InsertOne(backCtx, insert)
+	_, mdbErr := collection.InsertOne(ctx, insert)
 
 	if mdbErr != nil {
 		return dbController.NewDBError(mdbErr.Error())
@@ -524,7 +623,7 @@ func (mdbc *MongoDbController) AddRequestLog(log logging.RequestLogData) error {
 }
 
 func (mdbc *MongoDbController) AddInfoLog(log logging.InfoLogData) error {
-	collection, backCtx, cancel := mdbc.getCollection(LOGGING_COLLECTION)
+	collection, ctx, cancel := mdbc.getCollection(LOGGING_COLLECTION)
 	defer cancel()
 
 	insert := bson.M{
@@ -533,7 +632,7 @@ func (mdbc *MongoDbController) AddInfoLog(log logging.InfoLogData) error {
 		"message":   log.Message,
 	}
 
-	_, mdbErr := collection.InsertOne(backCtx, insert)
+	_, mdbErr := collection.InsertOne(ctx, insert)
 
 	if mdbErr != nil {
 		return dbController.NewDBError(mdbErr.Error())

@@ -100,3 +100,7 @@ func (ic *ImageController) GetImageDataById(id string) (doc dbController.ImageDo
 
 	return
 }
+
+func (ic *ImageController) DeleteImageDocument(delDoc dbController.DeleteImageDocument) (err error) {
+	return (*ic.DBController).DeleteImage(delDoc)
+}

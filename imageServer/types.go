@@ -80,12 +80,12 @@ type DeleteImageBody struct {
 	Id string `json:"id" binding:"required"`
 }
 
-func (dbb *DeleteImageBody) GetBlogDocument() *dbController.DeleteImageDocument {
+func (dbb *DeleteImageBody) GetImageDocument() dbController.DeleteImageDocument {
 	doc := dbController.DeleteImageDocument{
 		Id: dbb.Id,
 	}
 
-	return &doc
+	return doc
 }
 
 type AddImageFormData struct {

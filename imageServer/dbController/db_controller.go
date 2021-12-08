@@ -15,7 +15,8 @@ type DatabaseController interface {
 	GetImagesData(page int, pagination int) ([]ImageDocument, error)
 
 	EditImageData(doc EditImageDocument) error
-	DeleteImageData(doc DeleteImageDocument) error
+	DeleteImage(doc DeleteImageDocument) error
+	DeleteImageFile(doc DeleteImageFileDocument) error
 
 	AddRequestLog(log logging.RequestLogData) error
 	AddInfoLog(log logging.InfoLogData) error

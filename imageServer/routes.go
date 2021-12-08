@@ -26,6 +26,7 @@ func (srv *ImageServer) SetRoutes() {
 	// srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.EnsureLoggedIn, srv.PostAddImage)
 	srv.GinEngine.POST("/edit-image", srv.PostEditImage)
 	srv.GinEngine.POST("/delete-image", srv.PostDeleteImage)
+	srv.GinEngine.POST("/delete-image-file", srv.PostDeleteImageFile)
 }
 
 func (srv *ImageServer) SetMaxImageUploadSize(ctx *gin.Context) {
@@ -277,6 +278,26 @@ func (srv *ImageServer) PostEditImage(ctx *gin.Context) {
 }
 
 func (srv *ImageServer) PostDeleteImage(ctx *gin.Context) {
+	// Extract the body
+	var body DeleteImageBody
+
+	if bindJsonErr := ctx.ShouldBindJSON(&body); bindJsonErr != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{"error": "missing required values"},
+		)
+		return
+	}
+
+	srv.ImageController.DeleteImageDocument(body.GetImageDocument())
+
+	ctx.JSON(
+		http.StatusOK,
+		gin.H{},
+	)
+}
+
+func (srv *ImageServer) PostDeleteImageFile(ctx *gin.Context) {
 	ctx.JSON(
 		http.StatusOK,
 		gin.H{},
