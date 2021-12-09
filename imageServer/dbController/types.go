@@ -119,14 +119,10 @@ func (bd *ImageDocument) GetMap() map[string]interface{} {
 }
 
 type EditImageDocument struct {
-	Id             string
-	Title          *string
-	FileName       *string
-	Tags           *[]string
-	AuthorId       *string
-	DateAdded      *time.Time
-	UpdateAuthorId *string
-	DateUpdated    *time.Time
+	Id       string
+	Title    *string
+	FileName *string
+	Tags     *[]string
 }
 
 type DeleteImageDocument struct {

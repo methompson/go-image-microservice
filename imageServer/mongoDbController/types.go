@@ -33,13 +33,15 @@ func (udr *UserDocResult) GetUserDataDoc() *dbController.UserDataDocument {
 }
 
 type ImageFileDocResult struct {
-	Id         string                    `bson:"_id"`
-	Filename   string                    `bson:"filename"`
-	FormatName string                    `bson:"formatName"`
-	ImageSize  imageConversion.ImageSize `bson:"imageSize"`
-	FileSize   int                       `bson:"fileSize"`
-	Private    bool                      `bson:"private"`
-	ImageType  string                    `bson:"imageType"`
+	Id          string                    `bson:"_id"`
+	ImageId     string                    `bson:"imageId"`
+	ImageIdName string                    `bson:"imageIdName"`
+	Filename    string                    `bson:"filename"`
+	FormatName  string                    `bson:"formatName"`
+	ImageSize   imageConversion.ImageSize `bson:"imageSize"`
+	FileSize    int                       `bson:"fileSize"`
+	Private     bool                      `bson:"private"`
+	ImageType   string                    `bson:"imageType"`
 }
 
 func (ifdr ImageFileDocResult) getImageFileDocument() dbController.ImageFileDocument {

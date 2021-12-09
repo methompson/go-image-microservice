@@ -38,39 +38,21 @@ func (abb *AddImageBody) GetImageDocument() *dbController.AddImageDocument {
 }
 
 type EditImageBody struct {
-	Id             string    `json:"id" binding:"required"`
-	Title          *string   `json:"title"`
-	FileName       *string   `json:"fileName"`
-	Tags           *[]string `json:"tags"`
-	AuthorId       *string   `json:"authorId"`
-	DateAdded      *int      `json:"dateAdded"`
-	UpdateAuthorId *string   `json:"updateAuthorId"`
-	DateUpdated    *int      `json:"dateUpdated"`
+	Id       string    `json:"id" binding:"required"`
+	Title    *string   `json:"title"`
+	FileName *string   `json:"fileName"`
+	Tags     *[]string `json:"tags"`
+}
+
+type EditImageFileBody struct {
 }
 
 func (ebb *EditImageBody) GetImageDocument() *dbController.EditImageDocument {
-	var dateAdded *time.Time
-	var dateUpdated *time.Time
-
-	if ebb.DateAdded != nil {
-		t := time.Unix(int64(*ebb.DateAdded), 0)
-		dateAdded = &t
-	}
-
-	if ebb.DateUpdated != nil {
-		t := time.Unix(int64(*ebb.DateUpdated), 0)
-		dateUpdated = &t
-	}
-
 	doc := dbController.EditImageDocument{
-		Id:             ebb.Id,
-		Title:          ebb.Title,
-		FileName:       ebb.FileName,
-		Tags:           ebb.Tags,
-		AuthorId:       ebb.AuthorId,
-		DateAdded:      dateAdded,
-		UpdateAuthorId: ebb.UpdateAuthorId,
-		DateUpdated:    dateUpdated,
+		Id:       ebb.Id,
+		Title:    ebb.Title,
+		FileName: ebb.FileName,
+		Tags:     ebb.Tags,
 	}
 
 	return &doc
@@ -112,5 +94,6 @@ const (
 )
 
 type ImageFilterSort struct {
-	SortBy SortType
+	SortBy     SortType
+	SearchTerm string
 }

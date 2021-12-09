@@ -11,6 +11,7 @@ import (
 
 func (srv *ImageServer) SetRoutes() {
 	srv.GinEngine.Use(srv.ParseRequestUserAuth)
+	srv.GinEngine.Use(srv.SetMaxImageUploadSize)
 
 	// /image/:imageName serves an image file
 	srv.GinEngine.GET("/image/:imageName", srv.GetImageByName)
@@ -22,11 +23,11 @@ func (srv *ImageServer) SetRoutes() {
 	srv.GinEngine.GET("/images", srv.GetImagesByFirstPage)
 	srv.GinEngine.GET("/images/page/:page", srv.GetImagesByPage)
 
-	srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.TestLoggedIn, srv.PostAddImage)
-	// srv.GinEngine.POST("/add-image", srv.SetMaxImageUploadSize, srv.EnsureLoggedIn, srv.PostAddImage)
-	srv.GinEngine.POST("/edit-image", srv.PostEditImage)
-	srv.GinEngine.POST("/delete-image", srv.PostDeleteImage)
-	srv.GinEngine.POST("/delete-image-file", srv.PostDeleteImageFile)
+	srv.GinEngine.POST("/add-image", srv.TestLoggedIn, srv.PostAddImage)
+	// srv.GinEngine.POST("/add-image", srv.EnsureLoggedIn, srv.PostAddImage)
+	srv.GinEngine.POST("/edit-image", srv.TestLoggedIn, srv.PostEditImage)
+	srv.GinEngine.POST("/delete-image", srv.TestLoggedIn, srv.PostDeleteImage)
+	srv.GinEngine.POST("/delete-image-file", srv.TestLoggedIn, srv.PostDeleteImageFile)
 }
 
 func (srv *ImageServer) SetMaxImageUploadSize(ctx *gin.Context) {
