@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"methompson.com/image-microservice/imageServer/dbController"
-	"methompson.com/image-microservice/imageServer/imageConversion"
+	"methompson.com/image-microservice/imageServer/imageHandler"
 )
 
 const IMAGE_COLLECTION = "images"
@@ -33,42 +33,44 @@ func (udr *UserDocResult) GetUserDataDoc() *dbController.UserDataDocument {
 }
 
 type ImageFileDocResult struct {
-	Id          string                    `bson:"_id"`
-	ImageId     string                    `bson:"imageId"`
-	ImageIdName string                    `bson:"imageIdName"`
-	Filename    string                    `bson:"filename"`
-	FormatName  string                    `bson:"formatName"`
-	ImageSize   imageConversion.ImageSize `bson:"imageSize"`
-	FileSize    int                       `bson:"fileSize"`
-	Private     bool                      `bson:"private"`
-	ImageType   string                    `bson:"imageType"`
+	Id          string                 `bson:"_id"`
+	ImageId     string                 `bson:"imageId"`
+	ImageIdName string                 `bson:"imageIdName"`
+	Filename    string                 `bson:"filename"`
+	FormatName  string                 `bson:"formatName"`
+	ImageSize   imageHandler.ImageSize `bson:"imageSize"`
+	FileSize    int                    `bson:"fileSize"`
+	Private     bool                   `bson:"private"`
+	ImageType   string                 `bson:"imageType"`
 }
 
 func (ifdr ImageFileDocResult) getImageFileDocument() dbController.ImageFileDocument {
-	var imgType imageConversion.ImageType
+	var imgType imageHandler.ImageType
 	switch ifdr.ImageType {
 	case "jpeg":
-		imgType = imageConversion.Jpeg
+		imgType = imageHandler.Jpeg
 	case "png":
-		imgType = imageConversion.Png
+		imgType = imageHandler.Png
 	case "gif":
-		imgType = imageConversion.Gif
+		imgType = imageHandler.Gif
 	case "bmp":
-		imgType = imageConversion.Bmp
+		imgType = imageHandler.Bmp
 	case "tiff":
-		imgType = imageConversion.Tiff
+		imgType = imageHandler.Tiff
 	default:
-		imgType = imageConversion.Same
+		imgType = imageHandler.Same
 	}
 
 	return dbController.ImageFileDocument{
-		Id:         ifdr.Id,
-		Filename:   ifdr.Filename,
-		FormatName: ifdr.FormatName,
-		ImageSize:  ifdr.ImageSize,
-		FileSize:   ifdr.FileSize,
-		Private:    ifdr.Private,
-		ImageType:  imgType,
+		Id:          ifdr.Id,
+		ImageId:     ifdr.ImageId,
+		ImageIdName: ifdr.ImageIdName,
+		Filename:    ifdr.Filename,
+		FormatName:  ifdr.FormatName,
+		ImageSize:   ifdr.ImageSize,
+		FileSize:    ifdr.FileSize,
+		Private:     ifdr.Private,
+		ImageType:   imgType,
 	}
 }
 
@@ -113,7 +115,7 @@ func (idr *ImageDocResult) GetImageDocument() dbController.ImageDocument {
 	return dbController.ImageDocument{
 		Id:         idr.Id,
 		Title:      idr.Title,
-		FileName:   idr.FileName,
+		Filename:   idr.FileName,
 		IdName:     idr.IdName,
 		Tags:       idr.Tags,
 		ImageFiles: imageFiles,

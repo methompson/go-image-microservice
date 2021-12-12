@@ -1,4 +1,4 @@
-package imageConversion
+package imageHandler
 
 import (
 	"errors"
@@ -17,15 +17,8 @@ type ImageWriter struct {
 	imageData        imageData
 }
 
-func (iw *ImageWriter) makeFileName(name string, op ConversionOp) string {
-	var suffix string
-	if op.Obfuscate {
-		suffix = ""
-	} else {
-		suffix = "@" + op.Suffix
-	}
-
-	return name + suffix + "." + (*iw).GetExtension(op)
+func (iw *ImageWriter) makeFileNameFromOp(name string, op ConversionOp) string {
+	return MakeFileName(name, op.Suffix, (*iw).GetExtension(op), op.Obfuscate)
 }
 
 func (iw *ImageWriter) GetExtension(op ConversionOp) string {
@@ -36,20 +29,7 @@ func (iw *ImageWriter) GetExtension(op ConversionOp) string {
 		iType = (*iw).imageData.OriginalImageType
 	}
 
-	switch iType {
-	case Jpeg:
-		return "jpg"
-	case Png:
-		return "png"
-	case Gif:
-		return "gif"
-	case Bmp:
-		return "bmp"
-	case Tiff:
-		return "tiff"
-	default:
-		return ""
-	}
+	return GetExtensionFromImageType(iType)
 }
 
 func (iw *ImageWriter) AddNewOp(op ConversionOp) {
@@ -74,16 +54,16 @@ func (iw *ImageWriter) Commit() (ImageConversionResult, error) {
 	var wg sync.WaitGroup
 
 	// The name will be a UUID to minimize potential name collissions
-	idName := makeRandomName()
+	idName := MakeRandomName()
 	for _, imgOp := range iw.imageOperations {
 		var name string
 		if imgOp.Obfuscate {
-			name = makeRandomName()
+			name = MakeRandomName()
 		} else {
 			name = idName
 		}
 
-		fmt.Println(iw.makeFileName(name, imgOp))
+		fmt.Println(iw.makeFileNameFromOp(name, imgOp))
 
 		// We have to assign the value of imgOp to a variable so that it's not changed
 		// when the next loop iteration occurs. The go routine can wait until a blocking
@@ -142,7 +122,7 @@ func (iw *ImageWriter) rollback(writtenImages []ImageSizeFormat) []error {
 		folderPath := GetImagePath(imgDat.Filename)
 		filePath := path.Join(folderPath, imgDat.Filename)
 
-		err := deleteFile(filePath)
+		err := DeleteFile(filePath)
 
 		if err != nil {
 			errs = append(errs, err)
@@ -156,7 +136,7 @@ func (iw *ImageWriter) rollback(writtenImages []ImageSizeFormat) []error {
 // and returns the ImageSizeFormat for the converted file. Returns an error if there's
 // a problem with the write.
 func (iw *ImageWriter) writeNewFile(imgOp ConversionOp, name string) (ImageSizeFormat, error) {
-	filename := iw.makeFileName(name, imgOp)
+	filename := iw.makeFileNameFromOp(name, imgOp)
 
 	folderPath := GetImagePath(filename)
 
@@ -196,5 +176,33 @@ func MakeImageWriter(originalFileName string, imgData imageData) ImageWriter {
 		OriginalFileName: originalFileName,
 		imageOperations:  make(map[string]ConversionOp),
 		imageData:        imgData,
+	}
+}
+
+func MakeFileName(name, suffix, extension string, obfuscate bool) string {
+	var _suffix string
+	if obfuscate {
+		_suffix = ""
+	} else {
+		_suffix = "@" + suffix
+	}
+
+	return name + _suffix + "." + extension
+}
+
+func GetExtensionFromImageType(iType ImageType) string {
+	switch iType {
+	case Jpeg:
+		return "jpg"
+	case Png:
+		return "png"
+	case Gif:
+		return "gif"
+	case Bmp:
+		return "bmp"
+	case Tiff:
+		return "tiff"
+	default:
+		return ""
 	}
 }

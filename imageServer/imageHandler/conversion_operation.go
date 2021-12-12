@@ -1,4 +1,4 @@
-package imageConversion
+package imageHandler
 
 import (
 	"errors"

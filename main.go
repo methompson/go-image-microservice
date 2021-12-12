@@ -6,13 +6,13 @@ import (
 	"github.com/joho/godotenv"
 
 	"methompson.com/image-microservice/imageServer"
-	"methompson.com/image-microservice/imageServer/imageConversion"
+	"methompson.com/image-microservice/imageServer/imageHandler"
 )
 
 func main() {
 	godotenv.Load()
 
-	imgFolderErr := imageConversion.CheckOrCreateImageFolder(imageConversion.GetImageRootPath())
+	imgFolderErr := imageHandler.CheckOrCreateImageFolder(imageHandler.GetImageRootPath())
 
 	if imgFolderErr != nil {
 		log.Fatal(imgFolderErr.Error())

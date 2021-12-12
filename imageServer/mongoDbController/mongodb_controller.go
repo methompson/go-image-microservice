@@ -3,7 +3,6 @@ package mongoDbController
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"methompson.com/image-microservice/imageServer/dbController"
-	"methompson.com/image-microservice/imageServer/imageConversion"
+	"methompson.com/image-microservice/imageServer/imageHandler"
 	"methompson.com/image-microservice/imageServer/logging"
 )
 
@@ -286,15 +285,15 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 			var imgType string
 
 			switch img.ImageType {
-			case imageConversion.Jpeg:
+			case imageHandler.Jpeg:
 				imgType = "jpeg"
-			case imageConversion.Png:
+			case imageHandler.Png:
 				imgType = "png"
-			case imageConversion.Gif:
+			case imageHandler.Gif:
 				imgType = "gif"
-			case imageConversion.Bmp:
+			case imageHandler.Bmp:
 				imgType = "bmp"
-			case imageConversion.Tiff:
+			case imageHandler.Tiff:
 				imgType = "tiff"
 			}
 
@@ -313,14 +312,19 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 			})
 		}
 
+		if len(images) == 0 {
+			return nil, dbController.NewInvalidInputError("no images to save")
+		}
+
 		fileInsertResult, fileInsertErr := imgFileCollection.InsertMany(sessCtx, images)
 
 		if fileInsertErr != nil {
-			fmt.Printf("file insert error: %v\n", fileInsertErr)
 			return nil, fileInsertErr
 		}
 
-		fmt.Printf("file insert result: %v\n", fileInsertResult)
+		if len(fileInsertResult.InsertedIDs) == 0 {
+			return nil, dbController.NewDBError("no images inserted")
+		}
 
 		return imgId.Hex(), nil
 	}
@@ -328,7 +332,6 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 	session, sessionErr := mdbc.MongoClient.StartSession()
 
 	if sessionErr != nil {
-		fmt.Printf("Session Write Error: %v\n", sessionErr)
 		return "", sessionErr
 	}
 	defer session.EndSession(ctx)
@@ -339,8 +342,6 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 		session.AbortTransaction(ctx)
 		return "", transErr
 	}
-
-	fmt.Printf("result %v\n", result)
 
 	if id, ok := result.(string); ok {
 		return id, nil
@@ -468,7 +469,7 @@ func (mdbc *MongoDbController) GetImageDataWithMatcher(matchStage bson.D) (imgDo
 	return
 }
 
-func (mdbc *MongoDbController) GetImagesData(page int, pagination int) (imgDocs []dbController.ImageDocument, err error) {
+func (mdbc *MongoDbController) GetImagesData(page int, pagination int, sort dbController.SortImageFilter) (imgDocs []dbController.ImageDocument, err error) {
 	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
 	defer cancel()
 
@@ -477,10 +478,8 @@ func (mdbc *MongoDbController) GetImagesData(page int, pagination int) (imgDocs 
 	projectStage, authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
 
 	sortStage := bson.D{{
-		Key: "$sort",
-		Value: bson.M{
-			"dateAdded": -1,
-		},
+		Key:   "$sort",
+		Value: bson.M{"dateAdded": -1},
 	}}
 
 	limitStage := bson.D{{
@@ -523,8 +522,83 @@ func (mdbc *MongoDbController) GetImagesData(page int, pagination int) (imgDocs 
 	return
 }
 
+func (mdbc *MongoDbController) GetImageFileById(id string) (doc dbController.ImageFileDocument, err error) {
+	idObj, idObjErr := primitive.ObjectIDFromHex(id)
+
+	if idObjErr != nil {
+		err = dbController.NewInvalidInputError("invalid id")
+		return
+	}
+
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
+	defer cancel()
+
+	var result ImageFileDocResult
+
+	findErr := collection.FindOne(
+		ctx,
+		bson.M{
+			"_id": idObj,
+		},
+	).Decode(&result)
+
+	if findErr != nil {
+		return doc, findErr
+	}
+
+	return result.getImageFileDocument(), nil
+}
+
+func (mdbc *MongoDbController) ImageHasFiles(id string) (bool, error) {
+	image, err := mdbc.GetImageDataById(id)
+
+	if err != nil {
+		return false, err
+	}
+
+	if len(image.ImageFiles) == 0 {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (mdbc *MongoDbController) EditImageData(doc dbController.EditImageDocument) error {
 	return errors.New("Unimplemented")
+}
+
+func (mdbc *MongoDbController) EditImageFileData(doc dbController.EditImageFileDocument) (imgDoc dbController.EditImageFileResult, err error) {
+	id, err := primitive.ObjectIDFromHex(doc.Id)
+	if err != nil {
+		return imgDoc, dbController.NewInvalidInputError("Invalid User ID")
+	}
+
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
+	defer cancel()
+
+	filter := bson.M{"_id": id}
+
+	values := bson.M{}
+
+	if doc.ChangeObfuscate {
+		values["filename"] = doc.NewName
+	}
+
+	if doc.ChangePrivate {
+		values["private"] = doc.Private
+	}
+
+	update := bson.M{
+		"$set": values,
+	}
+
+	_, err = collection.UpdateOne(ctx, filter, update)
+
+	if err != nil {
+		return
+	}
+
+	return
 }
 
 func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument) error {
@@ -540,27 +614,25 @@ func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument)
 			return nil, docIdErr
 		}
 
+		_, ifErr := imgFileCollection.DeleteMany(ctx, bson.M{
+			"imageId": docId,
+		})
+
+		if ifErr != nil {
+			return nil, ifErr
+		}
+
 		result, iErr := imgCollection.DeleteOne(ctx, bson.M{
 			"_id": docId,
 		})
 
 		if iErr != nil {
-			fmt.Printf("image collection error: %v\n", iErr)
 			return nil, iErr
 		}
 
-		fmt.Printf("result %v\n", result)
-
-		result, ifErr := imgFileCollection.DeleteMany(ctx, bson.M{
-			"imageId": docId,
-		})
-
-		if ifErr != nil {
-			fmt.Printf("image collection error: %v\n", ifErr)
-			return nil, ifErr
+		if result.DeletedCount == 0 {
+			return nil, dbController.NewInvalidInputError("invalid id. no image deleted")
 		}
-
-		fmt.Printf("result %v\n", result)
 
 		return nil, nil
 	}
@@ -568,7 +640,6 @@ func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument)
 	session, sessionErr := mdbc.MongoClient.StartSession()
 
 	if sessionErr != nil {
-		fmt.Printf("Session Write Error: %v\n", sessionErr)
 		return sessionErr
 	}
 	defer session.EndSession(ctx)
@@ -584,7 +655,46 @@ func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument)
 }
 
 func (mdbc *MongoDbController) DeleteImageFile(doc dbController.DeleteImageFileDocument) error {
-	return errors.New("Unimplemented")
+	imgFile, imgErr := mdbc.GetImageFileById(doc.Id)
+
+	if imgErr != nil {
+		return imgErr
+	}
+
+	docId, docIdErr := primitive.ObjectIDFromHex(doc.Id)
+	if docIdErr != nil {
+		return docIdErr
+	}
+
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
+	defer cancel()
+
+	result, err := collection.DeleteOne(ctx, bson.M{
+		"_id": docId,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	if result.DeletedCount == 0 {
+		return dbController.NewInvalidInputError("invalid id. no image files deleted")
+	}
+
+	img, err := mdbc.GetImageDataById(imgFile.ImageId)
+
+	if err != nil {
+		return err
+	}
+
+	if len(img.ImageFiles) == 0 {
+		did := dbController.DeleteImageDocument{Id: img.Id}
+		return mdbc.DeleteImage(did)
+	}
+
+	// Put the above in a session?
+
+	return nil
 }
 
 func (mdbc *MongoDbController) AddRequestLog(log logging.RequestLogData) error {

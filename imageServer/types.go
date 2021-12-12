@@ -2,39 +2,14 @@ package imageServer
 
 import (
 	"os"
-	"time"
 
 	"methompson.com/image-microservice/imageServer/constants"
 	"methompson.com/image-microservice/imageServer/dbController"
-	"methompson.com/image-microservice/imageServer/imageConversion"
+	"methompson.com/image-microservice/imageServer/imageHandler"
 )
 
 func DebugMode() bool {
 	return os.Getenv(constants.GIN_MODE) != "release"
-}
-
-type AddImageBody struct {
-	Title          string   `json:"title" binding:"required"`
-	FileName       string   `json:"fileName" binding:"required"`
-	Tags           []string `json:"tags"`
-	AuthorId       string   `json:"authorId" binding:"required"`
-	DateAdded      int      `json:"dateAdded" binding:"required"`
-	UpdateAuthorId *string  `json:"updateAuthorId"`
-	DateUpdated    *int     `json:"dateUpdated"`
-}
-
-func (abb *AddImageBody) GetImageDocument() *dbController.AddImageDocument {
-	dateAdded := time.Unix(int64(abb.DateAdded), 0)
-
-	doc := dbController.AddImageDocument{
-		Title:     abb.Title,
-		FileName:  abb.FileName,
-		Tags:      abb.Tags,
-		AuthorId:  abb.AuthorId,
-		DateAdded: dateAdded,
-	}
-
-	return &doc
 }
 
 type EditImageBody struct {
@@ -44,10 +19,7 @@ type EditImageBody struct {
 	Tags     *[]string `json:"tags"`
 }
 
-type EditImageFileBody struct {
-}
-
-func (ebb *EditImageBody) GetImageDocument() *dbController.EditImageDocument {
+func (ebb *EditImageBody) GetImageDocument() dbController.EditImageDocument {
 	doc := dbController.EditImageDocument{
 		Id:       ebb.Id,
 		Title:    ebb.Title,
@@ -55,7 +27,31 @@ func (ebb *EditImageBody) GetImageDocument() *dbController.EditImageDocument {
 		Tags:     ebb.Tags,
 	}
 
-	return &doc
+	return doc
+}
+
+type EditImageFileBody struct {
+	Id        string `json:"id" binding:"required"`
+	Private   *bool  `json:"private"`
+	Obfuscate *bool  `json:"obfuscate"`
+}
+
+func (doc *EditImageFileBody) GetEditImageFileDocument() dbController.EditImageFileDocument {
+	imgDoc := dbController.EditImageFileDocument{
+		Id: doc.Id,
+	}
+
+	if doc.Private != nil {
+		imgDoc.ChangePrivate = true
+		imgDoc.Private = *doc.Private
+	}
+
+	if doc.Obfuscate != nil {
+		imgDoc.ChangeObfuscate = true
+		imgDoc.Obfuscate = *doc.Obfuscate
+	}
+
+	return imgDoc
 }
 
 type DeleteImageBody struct {
@@ -63,37 +59,31 @@ type DeleteImageBody struct {
 }
 
 func (dbb *DeleteImageBody) GetImageDocument() dbController.DeleteImageDocument {
-	doc := dbController.DeleteImageDocument{
+	return dbController.DeleteImageDocument{
 		Id: dbb.Id,
 	}
+}
 
-	return doc
+type DeleteImageFileBody struct {
+	Id string `json:"id" binding:"required"`
+}
+
+func (dbb *DeleteImageFileBody) GetImageFileDocument() dbController.DeleteImageFileDocument {
+	return dbController.DeleteImageFileDocument{
+		Id: dbb.Id,
+	}
 }
 
 type AddImageFormData struct {
-	Title      string                              `json:"title"`
-	Tags       []string                            `json:"tags"`
-	Operations []imageConversion.ConversionRequest `json:"operations"`
+	Title      string                           `json:"title"`
+	Tags       []string                         `json:"tags"`
+	Operations []imageHandler.ConversionRequest `json:"operations"`
 }
 
 func GetDefaultImageFormMetaData() AddImageFormData {
 	return AddImageFormData{
 		Title:      "",
 		Tags:       make([]string, 0),
-		Operations: make([]imageConversion.ConversionRequest, 0),
+		Operations: make([]imageHandler.ConversionRequest, 0),
 	}
-}
-
-type SortType int8
-
-const (
-	Name SortType = iota
-	NameReverse
-	DateAdded
-	DateAddedReverse
-)
-
-type ImageFilterSort struct {
-	SortBy     SortType
-	SearchTerm string
 }

@@ -25,7 +25,7 @@ func (srv *ImageServer) SetRoutes() {
 
 	srv.GinEngine.POST("/add-image", srv.TestLoggedIn, srv.PostAddImage)
 	// srv.GinEngine.POST("/add-image", srv.EnsureLoggedIn, srv.PostAddImage)
-	srv.GinEngine.POST("/edit-image", srv.TestLoggedIn, srv.PostEditImage)
+	srv.GinEngine.POST("/edit-image-file", srv.TestLoggedIn, srv.PostEditImageFile)
 	srv.GinEngine.POST("/delete-image", srv.TestLoggedIn, srv.PostDeleteImage)
 	srv.GinEngine.POST("/delete-image-file", srv.TestLoggedIn, srv.PostDeleteImageFile)
 }
@@ -146,13 +146,14 @@ func (srv *ImageServer) GetImagesByPage(ctx *gin.Context) {
 // TODO start defining filters that users can pass via query parameters
 func (srv *ImageServer) GetImages(ctx *gin.Context, page int) {
 	pagination := ctx.Query("pagination")
+	sortBy := ctx.Query("sortBy")
 
 	paginationNum, paginationNumErr := strconv.Atoi(pagination)
 	if paginationNumErr != nil {
 		paginationNum = -1
 	}
 
-	images, err := srv.ImageController.GetImages(page, paginationNum)
+	images, err := srv.ImageController.GetImages(page, paginationNum, sortBy)
 
 	if err != nil {
 		ctx.AbortWithStatusJSON(
@@ -271,7 +272,29 @@ func (srv *ImageServer) PostAddImage(ctx *gin.Context) {
 	)
 }
 
-func (srv *ImageServer) PostEditImage(ctx *gin.Context) {
+func (srv *ImageServer) PostEditImageFile(ctx *gin.Context) {
+	var body EditImageFileBody
+
+	if bindJsonErr := ctx.ShouldBindJSON(&body); bindJsonErr != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{"error": "missing required values"},
+		)
+		return
+	}
+
+	err := srv.ImageController.EditImageFileDocument(body)
+
+	if err != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": err.Error(),
+			},
+		)
+		return
+	}
+
 	ctx.JSON(
 		http.StatusOK,
 		gin.H{},
@@ -309,6 +332,29 @@ func (srv *ImageServer) PostDeleteImage(ctx *gin.Context) {
 }
 
 func (srv *ImageServer) PostDeleteImageFile(ctx *gin.Context) {
+	// Extract the body
+	var body DeleteImageFileBody
+
+	if bindJsonErr := ctx.ShouldBindJSON(&body); bindJsonErr != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{"error": "missing required values"},
+		)
+		return
+	}
+
+	err := srv.ImageController.DeleteImageFileDocument(body.GetImageFileDocument())
+
+	if err != nil {
+		ctx.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			gin.H{
+				"error": err.Error(),
+			},
+		)
+		return
+	}
+
 	ctx.JSON(
 		http.StatusOK,
 		gin.H{},

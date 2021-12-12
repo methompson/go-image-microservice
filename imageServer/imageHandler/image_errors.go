@@ -1,4 +1,4 @@
-package imageConversion
+package imageHandler
 
 type ImageError struct{ ErrMsg string }
 

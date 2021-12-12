@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"methompson.com/image-microservice/imageServer/imageConversion"
+	"methompson.com/image-microservice/imageServer/imageHandler"
 )
 
 func TestImageLocGetMap(t *testing.T) {
-	is1 := imageConversion.ImageSize{Width: 300, Height: 200}
+	is1 := imageHandler.ImageSize{Width: 300, Height: 200}
 
 	ifd1 := ImageFileDocument{
 		Id:         "id-1234",
@@ -17,10 +17,10 @@ func TestImageLocGetMap(t *testing.T) {
 		FileSize:   128,
 		ImageSize:  is1,
 		Private:    true,
-		ImageType:  imageConversion.Jpeg,
+		ImageType:  imageHandler.Jpeg,
 	}
 
-	is2 := imageConversion.ImageSize{Width: 640, Height: 480}
+	is2 := imageHandler.ImageSize{Width: 640, Height: 480}
 
 	ifd2 := ImageFileDocument{
 		Id:         "id-4567",
@@ -29,7 +29,7 @@ func TestImageLocGetMap(t *testing.T) {
 		FileSize:   256,
 		ImageSize:  is2,
 		Private:    false,
-		ImageType:  imageConversion.Jpeg,
+		ImageType:  imageHandler.Jpeg,
 	}
 
 	files := make([]ImageFileDocument, 0)
@@ -39,7 +39,7 @@ func TestImageLocGetMap(t *testing.T) {
 	imgDoc := ImageDocument{
 		Id:         "123",
 		Title:      "test",
-		FileName:   "test.jpg",
+		Filename:   "test.jpg",
 		IdName:     "id name",
 		Tags:       make([]string, 0),
 		ImageFiles: files,

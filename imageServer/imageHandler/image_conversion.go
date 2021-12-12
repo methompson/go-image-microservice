@@ -1,4 +1,4 @@
-package imageConversion
+package imageHandler
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func ProcessImageFile(ctx *gin.Context, conversionRequests []ConversionRequest) 
 }
 
 // Returns a string to be used as a file name. Currently just uses UUID
-func makeRandomName() string {
+func MakeRandomName() string {
 	return uuid.New().String()
 }
 
@@ -66,7 +66,7 @@ func RollBackWrites(data ImageConversionResult) error {
 		folderPath := GetImagePath(f.Filename)
 		filePath := path.Join(folderPath, f.Filename)
 
-		delErr := deleteFile(filePath)
+		delErr := DeleteFile(filePath)
 
 		if delErr != nil {
 			return delErr
@@ -77,8 +77,12 @@ func RollBackWrites(data ImageConversionResult) error {
 }
 
 // Simple file deletion function.
-func deleteFile(filePath string) error {
+func DeleteFile(filePath string) error {
 	return os.Remove(filePath)
+}
+
+func MoveFile(oldFilePath string, newFilePath string) error {
+	return os.Rename(oldFilePath, newFilePath)
 }
 
 // The save functions need to do a few things:
