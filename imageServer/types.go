@@ -8,8 +8,18 @@ import (
 	"methompson.com/image-microservice/imageServer/imageHandler"
 )
 
+// Debug mode is only activated when we set the DEBUG_MODE environment
+// variable to true
 func DebugMode() bool {
-	return os.Getenv(constants.GIN_MODE) != "release"
+	return os.Getenv(constants.DEBUG_MODE) == "true"
+}
+
+// AuthTestingMode is only activated we set the AUTH_TESTING_MODE environment
+// variable to true. AuthTestingMode allows a user to perform authenticated
+// actions without authentication credentials. Especially useful during
+// unit and integration tests
+func AuthTestingMode() bool {
+	return os.Getenv(constants.AUTH_TESTING_MODE) == "true"
 }
 
 type EditImageBody struct {

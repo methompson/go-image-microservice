@@ -165,8 +165,9 @@ const (
 
 // A struct for sorting image documents when getting multiple values
 type SortImageFilter struct {
-	Sortby   SortType
-	SearchBy string
+	Sortby      SortType
+	SearchBy    string
+	ShowPrivate bool
 }
 
 func MakeSortImageFilter(sortByStr string) SortImageFilter {

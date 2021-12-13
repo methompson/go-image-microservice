@@ -74,6 +74,7 @@ func (ic *ImageController) GetImages(page, paginationNum int, sortBy string) (do
 	}
 
 	filter := dbController.MakeSortImageFilter(sortBy)
+	filter.ShowPrivate = true
 
 	docs, err = (*ic.DBController).GetImagesData(page, _pagination, filter)
 	return

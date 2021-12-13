@@ -6,6 +6,7 @@ import (
 
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
+
 	"methompson.com/image-microservice/imageServer/dbController"
 )
 
@@ -17,17 +18,16 @@ func (srv *ImageServer) SetRoutes() {
 	srv.GinEngine.GET("/image/:imageName", srv.GetImageByName)
 
 	// /images/id/:imageId will serve information about an image.
-	srv.GinEngine.GET("/image/id/:imageId", srv.TestLoggedIn, srv.GetImageById)
+	srv.GinEngine.GET("/image/id/:imageId", srv.EnsureLoggedIn, srv.GetImageById)
 
 	// /images and /images/page/:page will serve pagination information about images
 	srv.GinEngine.GET("/images", srv.GetImagesByFirstPage)
 	srv.GinEngine.GET("/images/page/:page", srv.GetImagesByPage)
 
-	srv.GinEngine.POST("/add-image", srv.TestLoggedIn, srv.PostAddImage)
-	// srv.GinEngine.POST("/add-image", srv.EnsureLoggedIn, srv.PostAddImage)
-	srv.GinEngine.POST("/edit-image-file", srv.TestLoggedIn, srv.PostEditImageFile)
-	srv.GinEngine.POST("/delete-image", srv.TestLoggedIn, srv.PostDeleteImage)
-	srv.GinEngine.POST("/delete-image-file", srv.TestLoggedIn, srv.PostDeleteImageFile)
+	srv.GinEngine.POST("/add-image", srv.EnsureLoggedIn, srv.PostAddImage)
+	srv.GinEngine.POST("/edit-image-file", srv.EnsureLoggedIn, srv.PostEditImageFile)
+	srv.GinEngine.POST("/delete-image", srv.EnsureLoggedIn, srv.PostDeleteImage)
+	srv.GinEngine.POST("/delete-image-file", srv.EnsureLoggedIn, srv.PostDeleteImageFile)
 }
 
 func (srv *ImageServer) SetMaxImageUploadSize(ctx *gin.Context) {
@@ -41,11 +41,14 @@ func (srv *ImageServer) TestLoggedIn(ctx *gin.Context) {
 	ctx.Set("userId", "1234567890")
 }
 
-// The functino determines which source we use to retrieve the authentication token
+// The function determines which source we use to retrieve the authentication token
 // If a token is in the header, we parse the header. If there's no token in the header,
-// we parse the cookie.
+// we parse the cookie. If we have the AUTH_TESTING_MODE variable set to true, we
+// are in a testing mode and we just use a pass-through to get our tokens.
 func (srv *ImageServer) ParseRequestUserAuth(ctx *gin.Context) {
-	if srv.HasAuthHeader(ctx) {
+	if AuthTestingMode() {
+		srv.TestLoggedIn(ctx)
+	} else if srv.HasAuthHeader(ctx) {
 		srv.ParseRequestUserHeaders(ctx)
 	} else {
 		srv.ParseRequestUserCookies(ctx)
