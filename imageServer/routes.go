@@ -156,7 +156,9 @@ func (srv *ImageServer) GetImages(ctx *gin.Context, page int) {
 		paginationNum = -1
 	}
 
-	images, err := srv.ImageController.GetImages(page, paginationNum, sortBy)
+	showPrivate := userLoggedIn(ctx)
+
+	images, err := srv.ImageController.GetImages(page, paginationNum, sortBy, showPrivate)
 
 	if err != nil {
 		ctx.AbortWithStatusJSON(
@@ -201,6 +203,10 @@ func (srv *ImageServer) GetImageByName(ctx *gin.Context) {
 	ctx.File(filepath)
 }
 
+func userLoggedIn(ctx *gin.Context) bool {
+	return len(ctx.GetString("userId")) > 0
+}
+
 // Determines if the image requires privileges and whether the requesting user
 // has those privileges
 func canViewImage(ctx *gin.Context, imgDoc dbController.ImageFileDocument) bool {
@@ -230,7 +236,9 @@ func (srv *ImageServer) GetImageById(ctx *gin.Context) {
 		return
 	}
 
-	doc, err := srv.ImageController.GetImageDataById(id)
+	showPrivate := userLoggedIn(ctx)
+
+	doc, err := srv.ImageController.GetImageDataById(id, showPrivate)
 
 	if err != nil {
 		ctx.AbortWithStatusJSON(

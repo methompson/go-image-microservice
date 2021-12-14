@@ -12,13 +12,13 @@ import (
 // extension to be appended to the end of the file name. imagesToCommit are the
 // individual image data structs that will eventually be written.
 type ImageWriter struct {
-	OriginalFileName string
+	OriginalFilename string
 	imageOperations  map[string]ConversionOp
 	imageData        imageData
 }
 
-func (iw *ImageWriter) makeFileNameFromOp(name string, op ConversionOp) string {
-	return MakeFileName(name, op.Suffix, (*iw).GetExtension(op), op.Obfuscate)
+func (iw *ImageWriter) makeFilenameFromOp(name string, op ConversionOp) string {
+	return MakeFilename(name, op.Suffix, (*iw).GetExtension(op), op.Obfuscate)
 }
 
 func (iw *ImageWriter) GetExtension(op ConversionOp) string {
@@ -63,7 +63,7 @@ func (iw *ImageWriter) Commit() (ImageConversionResult, error) {
 			name = idName
 		}
 
-		fmt.Println(iw.makeFileNameFromOp(name, imgOp))
+		fmt.Println(iw.makeFilenameFromOp(name, imgOp))
 
 		// We have to assign the value of imgOp to a variable so that it's not changed
 		// when the next loop iteration occurs. The go routine can wait until a blocking
@@ -136,7 +136,7 @@ func (iw *ImageWriter) rollback(writtenImages []ImageSizeFormat) []error {
 // and returns the ImageSizeFormat for the converted file. Returns an error if there's
 // a problem with the write.
 func (iw *ImageWriter) writeNewFile(imgOp ConversionOp, name string) (ImageSizeFormat, error) {
-	filename := iw.makeFileNameFromOp(name, imgOp)
+	filename := iw.makeFilenameFromOp(name, imgOp)
 
 	folderPath := GetImagePath(filename)
 
@@ -171,15 +171,15 @@ func (iw *ImageWriter) writeNewFile(imgOp ConversionOp, name string) (ImageSizeF
 	return imgSizeF, nil
 }
 
-func MakeImageWriter(originalFileName string, imgData imageData) ImageWriter {
+func MakeImageWriter(originalFilename string, imgData imageData) ImageWriter {
 	return ImageWriter{
-		OriginalFileName: originalFileName,
+		OriginalFilename: originalFilename,
 		imageOperations:  make(map[string]ConversionOp),
 		imageData:        imgData,
 	}
 }
 
-func MakeFileName(name, suffix, extension string, obfuscate bool) string {
+func MakeFilename(name, suffix, extension string, obfuscate bool) string {
 	var _suffix string
 	if obfuscate {
 		_suffix = ""

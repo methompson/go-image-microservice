@@ -86,7 +86,7 @@ type ImageLogger interface {
 ****************************************************************************************/
 type FileLogger struct {
 	FilePath   string
-	FileName   string
+	Filename   string
 	FileHandle *os.File
 }
 
@@ -112,7 +112,7 @@ func (fl *FileLogger) WriteLog(log LogData) error {
 
 func MakeNewFileLogger(path string, name string) (fl *FileLogger, err error) {
 	fl = &FileLogger{
-		FileName: name,
+		Filename: name,
 		FilePath: path,
 	}
 

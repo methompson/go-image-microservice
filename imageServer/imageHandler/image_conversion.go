@@ -39,17 +39,16 @@ func ProcessImageFile(ctx *gin.Context, conversionRequests []ConversionRequest) 
 		return ImageConversionResult{}, fileBytesErr
 	}
 
-	originalFileName := fileHeader.Filename
-	// fmt.Println(originalFileName)
+	originalFilename := fileHeader.Filename
 
 	if contentType == "image/heic" {
-		return processNewHeifImage(fileBytes, originalFileName, ops)
+		return processNewHeifImage(fileBytes, originalFilename, ops)
 	} else if contentType == "image/jpeg" ||
 		contentType == "image/png" ||
 		contentType == "image/gif" ||
 		contentType == "image/bmp" ||
 		contentType == "image/tiff" {
-		return processNewImage(fileBytes, originalFileName, ops)
+		return processNewImage(fileBytes, originalFilename, ops)
 	}
 
 	return ImageConversionResult{}, errors.New("invalid image format")
@@ -95,7 +94,7 @@ func MoveFile(oldFilePath string, newFilePath string) error {
 // * Get an *image.Image struct
 // * Get the exif
 // Then we pass the above two points to the encode Jpeg function.
-func processNewHeifImage(imageBytes []byte, originalFileName string, conversionOps []ConversionOp) (ImageConversionResult, error) {
+func processNewHeifImage(imageBytes []byte, originalFilename string, conversionOps []ConversionOp) (ImageConversionResult, error) {
 	reader := bytes.NewReader(imageBytes)
 	exif, err := goheif.ExtractExif(reader)
 	if err != nil {
@@ -111,24 +110,24 @@ func processNewHeifImage(imageBytes []byte, originalFileName string, conversionO
 
 	imgDat := makeImageDataFromImage(&image, Jpeg, exifData{ExifData: exif})
 
-	return convertAndWriteImage(imgDat, originalFileName, conversionOps)
+	return convertAndWriteImage(imgDat, originalFilename, conversionOps)
 }
 
 // Takes an image file and processes the file based on environment or user parameters.
 // imageBytes represents a file send to the function. The function confirms the jpeg
 // data, parses the file, performs scale operations and save the data to the file system.
-func processNewImage(imageBytes []byte, originalFileName string, conversionOps []ConversionOp) (ImageConversionResult, error) {
+func processNewImage(imageBytes []byte, originalFilename string, conversionOps []ConversionOp) (ImageConversionResult, error) {
 	imgDat, imageErr := makeImageDataFromBytes(imageBytes)
 
 	if imageErr != nil {
 		return ImageConversionResult{}, imageErr
 	}
 
-	return convertAndWriteImage(imgDat, originalFileName, conversionOps)
+	return convertAndWriteImage(imgDat, originalFilename, conversionOps)
 }
 
-func convertAndWriteImage(imgDat imageData, originalFileName string, conversionOps []ConversionOp) (ImageConversionResult, error) {
-	iw := MakeImageWriter(originalFileName, imgDat)
+func convertAndWriteImage(imgDat imageData, originalFilename string, conversionOps []ConversionOp) (ImageConversionResult, error) {
+	iw := MakeImageWriter(originalFilename, imgDat)
 	// iw.AddNewOp(makeOriginalOp())
 
 	// The length of conversionOps will be 1 if the only valid operation is a thumbnail

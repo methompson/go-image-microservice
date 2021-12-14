@@ -10,7 +10,7 @@ type DatabaseController interface {
 	AddImageData(doc AddImageDocument) (id string, err error)
 
 	GetImageByName(id string) (ImageFileDocument, error)
-	GetImageDataById(id string) (ImageDocument, error)
+	GetImageDataById(id string, showPrivate bool) (ImageDocument, error)
 	GetImagesData(page int, pagination int, sort SortImageFilter) ([]ImageDocument, error)
 	GetImageFileById(id string) (ImageFileDocument, error)
 

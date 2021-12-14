@@ -91,7 +91,7 @@ func (ifdr ImageFileDocResult) GetMap() map[string]interface{} {
 type ImageDocResult struct {
 	Id        string               `bson:"_id"`
 	Title     string               `bson:"title"`
-	FileName  string               `bson:"fileName"`
+	Filename  string               `bson:"filename"`
 	IdName    string               `bson:"idName"`
 	Images    []ImageFileDocResult `bson:"images"`
 	Tags      []string             `bson:"tags"`
@@ -115,7 +115,7 @@ func (idr *ImageDocResult) GetImageDocument() dbController.ImageDocument {
 	return dbController.ImageDocument{
 		Id:         idr.Id,
 		Title:      idr.Title,
-		Filename:   idr.FileName,
+		Filename:   idr.Filename,
 		IdName:     idr.IdName,
 		Tags:       idr.Tags,
 		ImageFiles: imageFiles,

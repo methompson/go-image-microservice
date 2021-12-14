@@ -45,13 +45,13 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 		Title:       imageFormData.Title,
 		Tags:        imageFormData.Tags,
 		IdName:      output.IdName,
-		FileName:    output.OriginalFileName,
+		Filename:    output.OriginalFilename,
 		SizeFormats: output.SizeFormats,
 		AuthorId:    ctx.GetString("userId"),
 		DateAdded:   time.Now(),
 	}
 
-	fmt.Println(output.OriginalFileName)
+	fmt.Println(output.OriginalFilename)
 	fmt.Println(addImgDoc.AuthorId)
 
 	_, addImageErr := (*ic.DBController).AddImageData(addImgDoc)
@@ -65,7 +65,7 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 	return nil
 }
 
-func (ic *ImageController) GetImages(page, paginationNum int, sortBy string) (docs []dbController.ImageDocument, err error) {
+func (ic *ImageController) GetImages(page, paginationNum int, sortBy string, showPrivate bool) (docs []dbController.ImageDocument, err error) {
 	var _pagination int
 	if paginationNum <= 0 {
 		_pagination = 50
@@ -74,7 +74,7 @@ func (ic *ImageController) GetImages(page, paginationNum int, sortBy string) (do
 	}
 
 	filter := dbController.MakeSortImageFilter(sortBy)
-	filter.ShowPrivate = true
+	filter.ShowPrivate = showPrivate
 
 	docs, err = (*ic.DBController).GetImagesData(page, _pagination, filter)
 	return
@@ -100,8 +100,8 @@ func (ic *ImageController) GetImageByName(ctx *gin.Context) (filepath string, im
 	return
 }
 
-func (ic *ImageController) GetImageDataById(id string) (doc dbController.ImageDocument, err error) {
-	doc, err = (*ic.DBController).GetImageDataById(id)
+func (ic *ImageController) GetImageDataById(id string, showPrivate bool) (doc dbController.ImageDocument, err error) {
+	doc, err = (*ic.DBController).GetImageDataById(id, showPrivate)
 	return
 }
 
@@ -147,7 +147,7 @@ func (ic *ImageController) RenameImageFile(editDoc dbController.EditImageFileDoc
 	}
 
 	// Construct the new name from the new name base above
-	newName := imageHandler.MakeFileName(
+	newName := imageHandler.MakeFilename(
 		newNameBase,
 		imgFile.FormatName,
 		imageHandler.GetExtensionFromImageType(imgFile.ImageType),
@@ -203,7 +203,7 @@ func (ic *ImageController) MakeImageFileDBEdit(editDoc dbController.EditImageFil
 }
 
 func (ic *ImageController) DeleteImageDocument(delDoc dbController.DeleteImageDocument) (err error) {
-	img, imgErr := (*ic.DBController).GetImageDataById(delDoc.Id)
+	img, imgErr := (*ic.DBController).GetImageDataById(delDoc.Id, true)
 
 	if imgErr != nil {
 		return imgErr

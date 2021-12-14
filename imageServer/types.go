@@ -25,7 +25,7 @@ func AuthTestingMode() bool {
 type EditImageBody struct {
 	Id       string    `json:"id" binding:"required"`
 	Title    *string   `json:"title"`
-	FileName *string   `json:"fileName"`
+	Filename *string   `json:"filename"`
 	Tags     *[]string `json:"tags"`
 }
 
@@ -33,7 +33,7 @@ func (ebb *EditImageBody) GetImageDocument() dbController.EditImageDocument {
 	doc := dbController.EditImageDocument{
 		Id:       ebb.Id,
 		Title:    ebb.Title,
-		FileName: ebb.FileName,
+		Filename: ebb.Filename,
 		Tags:     ebb.Tags,
 	}
 

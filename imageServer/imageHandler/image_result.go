@@ -73,7 +73,7 @@ func MakeImageSizeFormat(filename string, fileSize int, imageSize ImageSize, img
 // filesystem. It provides information, like, name, extension and size formats
 type ImageConversionResult struct {
 	IdName           string
-	OriginalFileName string
+	OriginalFilename string
 	SizeFormats      []ImageSizeFormat
 }
 
@@ -84,7 +84,7 @@ func (iod *ImageConversionResult) AddSizeFormat(sf ImageSizeFormat) {
 func makeImageConversionResult(iw *ImageWriter, idName string, formats []ImageSizeFormat) ImageConversionResult {
 	return ImageConversionResult{
 		IdName:           idName,
-		OriginalFileName: iw.OriginalFileName,
+		OriginalFilename: iw.OriginalFilename,
 		SizeFormats:      formats,
 	}
 }

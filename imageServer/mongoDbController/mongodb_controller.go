@@ -72,7 +72,7 @@ func (mdbc *MongoDbController) initImageFileCollection(dbName string) error {
 			},
 			"filename": bson.M{
 				"bsonType":    "string",
-				"description": "fileName must be a string",
+				"description": "filename must be a string",
 			},
 			"imageSize": bson.M{
 				"bsonType":    "object",
@@ -140,7 +140,7 @@ func (mdbc *MongoDbController) initImageCollection(dbName string) error {
 		"bsonType": "object",
 		"required": []string{
 			"title",
-			"fileName",
+			"filename",
 			"idName",
 			"tags",
 			"authorId",
@@ -151,9 +151,9 @@ func (mdbc *MongoDbController) initImageCollection(dbName string) error {
 				"bsonType":    "string",
 				"description": "title must be a string",
 			},
-			"fileName": bson.M{
+			"filename": bson.M{
 				"bsonType":    "string",
-				"description": "fileName must be a string",
+				"description": "filename must be a string",
 			},
 			"idName": bson.M{
 				"bsonType":    "string",
@@ -289,7 +289,7 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 
 		imgDoc := bson.M{
 			"title":     doc.Title,
-			"fileName":  doc.FileName,
+			"filename":  doc.Filename,
 			"idName":    doc.IdName,
 			"tags":      doc.Tags,
 			"authorId":  doc.AuthorId,
@@ -393,23 +393,7 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 
 // Returns a series of bson objects that are used during the GET process for image documents,
 // the image files associated with that document and user information.
-func (mdbc *MongoDbController) GetImageDataAggregationStages() (projectStage, authorLookupStage, imageFileLookupStage bson.D) {
-	projectStage = bson.D{
-		{
-			Key: "$project",
-			Value: bson.M{
-				"title":     1,
-				"fileName":  1,
-				"idName":    1,
-				"tags":      1,
-				"imageIds":  1,
-				"authorId":  1,
-				"dateAdded": 1,
-				"images":    1,
-			},
-		},
-	}
-
+func (mdbc *MongoDbController) GetImageDataAggregationStages() (authorLookupStage, imageFileLookupStage bson.D) {
 	authorLookupStage = bson.D{{
 		Key: "$lookup",
 		Value: bson.M{
@@ -431,6 +415,56 @@ func (mdbc *MongoDbController) GetImageDataAggregationStages() (projectStage, au
 	}}
 
 	return
+}
+
+// This project stage show all values of an image, but filters out private images
+func (mdbc *MongoDbController) getPublicImageProjectStage() bson.D {
+	return bson.D{
+		{
+			Key: "$project",
+			Value: bson.M{
+				"title":     1,
+				"filename":  1,
+				"idName":    1,
+				"tags":      1,
+				"imageIds":  1,
+				"authorId":  1,
+				"dateAdded": 1,
+				"images": bson.M{
+					"$filter": bson.M{
+						"input": "$images",
+						"as":    "image",
+						"cond": bson.M{
+							"$eq": bson.A{
+								"$$image.private",
+								false,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// This projection stage shows all values of an image and makes no distinction
+// between public and private images.
+func (mdbc *MongoDbController) getImageProjectStage() bson.D {
+	return bson.D{
+		{
+			Key: "$project",
+			Value: bson.M{
+				"title":     1,
+				"filename":  1,
+				"idName":    1,
+				"tags":      1,
+				"imageIds":  1,
+				"authorId":  1,
+				"dateAdded": 1,
+				"images":    1,
+			},
+		},
+	}
 }
 
 // Gets an image file from the collection with the file name provided. This should only
@@ -457,7 +491,7 @@ func (mdbc *MongoDbController) GetImageByName(name string) (imgDoc dbController.
 
 // Gets image data (not image file data) using the id. This function constructs a matcher
 // object and returns the results from GetImageDataWithMatcher
-func (mdbc *MongoDbController) GetImageDataById(id string) (imgDoc dbController.ImageDocument, err error) {
+func (mdbc *MongoDbController) GetImageDataById(id string, showPrivate bool) (imgDoc dbController.ImageDocument, err error) {
 	idObj, idObjErr := primitive.ObjectIDFromHex(id)
 
 	if idObjErr != nil {
@@ -474,24 +508,33 @@ func (mdbc *MongoDbController) GetImageDataById(id string) (imgDoc dbController.
 		},
 	}
 
-	return mdbc.GetImageDataWithMatcher(matchStage)
+	return mdbc.GetImageDataWithMatcher(matchStage, showPrivate)
 }
 
 // GetImageDataWithMatcher is a convenience function that uses the aggregation pipeline
 // to compile image documents using MongoDB's variation of an inner join.
-func (mdbc *MongoDbController) GetImageDataWithMatcher(matchStage bson.D) (imgDoc dbController.ImageDocument, err error) {
-	// We get the ready-made aggregation stages here that perform common search functions.
-	projectStage, authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
-
-	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
-	defer cancel()
-
+func (mdbc *MongoDbController) GetImageDataWithMatcher(matchStage bson.D, showPrivate bool) (imgDoc dbController.ImageDocument, err error) {
 	// We're expecting only one value, but we use a limit, just in case.
 	// Uncertain how much this required.
 	limitStage := bson.D{{
 		Key:   "$limit",
 		Value: int32(1),
 	}}
+
+	// We get the ready-made aggregation stages here that perform common search functions.
+	authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
+
+	// We use the showPrivate boolean to determine whether we should use the more
+	// or less permissive projection stage
+	var projectStage bson.D
+	if showPrivate {
+		projectStage = mdbc.getImageProjectStage()
+	} else {
+		projectStage = mdbc.getPublicImageProjectStage()
+	}
+
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
+	defer cancel()
 
 	// The actual aggregation call. The order of the stages is important.
 	cursor, aggErr := collection.Aggregate(ctx, mongo.Pipeline{
@@ -533,43 +576,55 @@ func (mdbc *MongoDbController) GetImagesData(page, pagination int, sort dbContro
 	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
 	defer cancel()
 
+	pipeline := mongo.Pipeline{}
+
 	matchStage := bson.D{{Key: "$match", Value: bson.M{}}}
+	pipeline = append(pipeline, matchStage)
 
-	var projectStage bson.D
-	projectStage, authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
-
-	if !sort.ShowPrivate {
-		projectStage = bson.D{
-			{
-				Key: "$project",
-				Value: bson.M{
-					"title":     1,
-					"fileName":  1,
-					"idName":    1,
-					"tags":      1,
-					"imageIds":  1,
-					"authorId":  1,
-					"dateAdded": 1,
-					"images": bson.M{
-						"$filter": bson.M{
-							"input": "$images",
-							"as":    "image",
-							"cond": bson.M{
-								"$eq": bson.A{
-									"$$image.private",
-									false,
-								},
-							},
-						},
-					},
-				},
+	// This stage is used to generate lower case letters for each file name
+	// on the chance that we're sorting by file name.
+	lowerCaseLettersStage := bson.D{{
+		Key: "$project",
+		Value: bson.M{
+			"filename": 1,
+			"lowercaseFilename": bson.M{
+				"$toLower": "$filename",
 			},
-		}
-	}
+		},
+	}}
 
-	sortStage := bson.D{{
-		Key:   "$sort",
-		Value: bson.M{"dateAdded": -1},
+	var sortStage bson.D
+
+	switch sort.Sortby {
+	case dbController.Name:
+		pipeline = append(pipeline, lowerCaseLettersStage)
+		sortStage = bson.D{{
+			Key:   "$sort",
+			Value: bson.M{"lowercaseFilename": 1},
+		}}
+	case dbController.NameReverse:
+		pipeline = append(pipeline, lowerCaseLettersStage)
+		sortStage = bson.D{{
+			Key:   "$sort",
+			Value: bson.M{"lowercaseFilename": -1},
+		}}
+	case dbController.DateAddedReverse:
+		sortStage = bson.D{{
+			Key:   "$sort",
+			Value: bson.M{"dateAdded": 1},
+		}}
+	// case dbController.DateAdded:
+	default:
+		sortStage = bson.D{{
+			Key:   "$sort",
+			Value: bson.M{"dateAdded": -1},
+		}}
+	}
+	pipeline = append(pipeline, sortStage)
+
+	skipStage := bson.D{{
+		Key:   "$skip",
+		Value: int64((page - 1) * pagination),
 	}}
 
 	limitStage := bson.D{{
@@ -577,20 +632,36 @@ func (mdbc *MongoDbController) GetImagesData(page, pagination int, sort dbContro
 		Value: int32(pagination),
 	}}
 
-	skipStage := bson.D{{
-		Key:   "$skip",
-		Value: int64((page - 1) * pagination),
-	}}
+	pipeline = append(pipeline, skipStage)
+	pipeline = append(pipeline, limitStage)
 
-	cursor, aggErr := collection.Aggregate(ctx, mongo.Pipeline{
-		matchStage,
-		sortStage,
-		skipStage,
-		limitStage,
-		authorLookupStage,
-		imageFileLookupStage,
-		projectStage,
-	})
+	authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
+
+	pipeline = append(pipeline, authorLookupStage)
+	pipeline = append(pipeline, imageFileLookupStage)
+
+	// We use the showPrivate boolean to determine whether we should use the more
+	// or less permissive projection stage
+	var projectStage bson.D
+	if !sort.ShowPrivate {
+		projectStage = mdbc.getPublicImageProjectStage()
+	} else {
+		projectStage = mdbc.getImageProjectStage()
+	}
+
+	pipeline = append(pipeline, projectStage)
+
+	cursor, aggErr := collection.Aggregate(ctx, pipeline)
+	// cursor, aggErr := collection.Aggregate(ctx, mongo.Pipeline{
+	// 	matchStage,
+	// 	lowerCaseLettersStage,
+	// 	sortStage,
+	// 	skipStage,
+	// 	limitStage,
+	// 	authorLookupStage,
+	// 	imageFileLookupStage,
+	// 	projectStage,
+	// })
 
 	if aggErr != nil {
 		err = aggErr
@@ -612,6 +683,7 @@ func (mdbc *MongoDbController) GetImagesData(page, pagination int, sort dbContro
 	return
 }
 
+// Gets an image file by its ID.
 func (mdbc *MongoDbController) GetImageFileById(id string) (doc dbController.ImageFileDocument, err error) {
 	idObj, idObjErr := primitive.ObjectIDFromHex(id)
 
@@ -639,8 +711,10 @@ func (mdbc *MongoDbController) GetImageFileById(id string) (doc dbController.Ima
 	return result.getImageFileDocument(), nil
 }
 
+// This function determines if an image has any files. This is to be used for the
+// cleanup function.
 func (mdbc *MongoDbController) ImageHasFiles(id string) (bool, error) {
-	image, err := mdbc.GetImageDataById(id)
+	image, err := mdbc.GetImageDataById(id, true)
 
 	if err != nil {
 		return false, err
@@ -657,7 +731,15 @@ func (mdbc *MongoDbController) EditImageData(doc dbController.EditImageDocument)
 	return errors.New("Unimplemented")
 }
 
+// This function edits an individual image file. Currently, there are two factors
+// that can be changed: We can make the image private or not private and we can
+// obfuscate the file name (to prevent people from guessing the image files)
 func (mdbc *MongoDbController) EditImageFileData(doc dbController.EditImageFileDocument) (imgDoc dbController.EditImageFileResult, err error) {
+	// If there are no edits to be made, we'll return an error
+	if !doc.ChangesExist() {
+		return imgDoc, dbController.NewInvalidInputError("no edits to be made")
+	}
+
 	id, err := primitive.ObjectIDFromHex(doc.Id)
 	if err != nil {
 		return imgDoc, dbController.NewInvalidInputError("Invalid User ID")
@@ -771,7 +853,7 @@ func (mdbc *MongoDbController) DeleteImageFile(doc dbController.DeleteImageFileD
 		return dbController.NewInvalidInputError("invalid id. no image files deleted")
 	}
 
-	img, err := mdbc.GetImageDataById(imgFile.ImageId)
+	img, err := mdbc.GetImageDataById(imgFile.ImageId, true)
 
 	if err != nil {
 		return err

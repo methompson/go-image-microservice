@@ -17,7 +17,7 @@ type UserDataDocument struct {
 
 // A struct representing a new image
 // Title is a user provided description of the image.
-// FileName is the original file name of the file when uploaded
+// Filename is the original file name of the file when uploaded
 // IdName is a UUID string that is provided to images when they are not obfuscated. it connects images to the ImageDocument
 // Tags is a user provided collection of descriptor strings for the image
 // SizeFormats represents the actual image files and metadata about each image, such as size and resolution
@@ -25,7 +25,7 @@ type UserDataDocument struct {
 // DateAdded is the date when the image was uploaded
 type AddImageDocument struct {
 	Title       string
-	FileName    string
+	Filename    string
 	IdName      string
 	Tags        []string
 	SizeFormats []imageHandler.ImageSizeFormat
@@ -99,7 +99,7 @@ func (bd *ImageDocument) GetMap() map[string]interface{} {
 	m["id"] = bd.Id
 
 	m["title"] = bd.Title
-	m["fileName"] = bd.Filename
+	m["filename"] = bd.Filename
 	m["author"] = bd.Author
 	m["authorId"] = bd.AuthorId
 	m["dateAdded"] = bd.DateAdded.Unix()
@@ -124,7 +124,7 @@ func (bd *ImageDocument) GetMap() map[string]interface{} {
 type EditImageDocument struct {
 	Id       string
 	Title    *string
-	FileName *string
+	Filename *string
 	Tags     *[]string
 }
 
@@ -179,7 +179,7 @@ func MakeSortImageFilter(sortByStr string) SortImageFilter {
 		sortBy = NameReverse
 	case "dateaddedreverse":
 		sortBy = DateAddedReverse
-	case "dateadded":
+	// case "dateadded":
 	default:
 		sortBy = DateAdded
 	}
