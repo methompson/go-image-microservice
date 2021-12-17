@@ -20,7 +20,7 @@ type DatabaseController interface {
 	EditImageFileData(doc EditImageFileDocument) (EditImageFileResult, error)
 
 	DeleteImage(doc DeleteImageDocument) error
-	DeleteImageFile(doc DeleteImageFileDocument) error
+	DeleteImageFile(doc DeleteImageFileDocument) (ImageFileDocument, error)
 
 	AddRequestLog(log logging.RequestLogData) error
 	AddInfoLog(log logging.InfoLogData) error

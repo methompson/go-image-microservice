@@ -210,7 +210,7 @@ func (ic *ImageController) DeleteImageDocument(delDoc dbController.DeleteImageDo
 	}
 
 	for _, imgFile := range img.ImageFiles {
-		err := DeleteWithImageFileDocument(imgFile)
+		err := DeleteFileWithImageFileDocument(imgFile)
 		if err != nil {
 			return err
 		}
@@ -220,22 +220,16 @@ func (ic *ImageController) DeleteImageDocument(delDoc dbController.DeleteImageDo
 }
 
 func (ic *ImageController) DeleteImageFileDocument(delDoc dbController.DeleteImageFileDocument) (err error) {
-	imgDoc, imgErr := (*ic.DBController).GetImageFileById(delDoc.Id)
+	imgDoc, err := (*ic.DBController).DeleteImageFile(delDoc)
 
-	if imgErr != nil {
-		return imgErr
+	if err != nil {
+		return
 	}
 
-	delErr := DeleteWithImageFileDocument(imgDoc)
-
-	if delErr != nil {
-		return delErr
-	}
-
-	return (*ic.DBController).DeleteImageFile(delDoc)
+	return DeleteFileWithImageFileDocument(imgDoc)
 }
 
-func DeleteWithImageFileDocument(imgDoc dbController.ImageFileDocument) error {
+func DeleteFileWithImageFileDocument(imgDoc dbController.ImageFileDocument) error {
 	folderPath := imageHandler.GetImagePath(imgDoc.Filename)
 	filePath := path.Join(folderPath, imgDoc.Filename)
 

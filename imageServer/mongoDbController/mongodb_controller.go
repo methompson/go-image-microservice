@@ -499,7 +499,31 @@ func (mdbc *MongoDbController) GetImageDataById(id string, showPrivate bool) (im
 		return
 	}
 
-	matchStage := bson.D{
+	matchStage := mdbc.getBasicMatcher(idObj)
+
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
+	defer cancel()
+
+	return mdbc.getImageDataWithMatcherAndCollection(matchStage, showPrivate, collection, ctx)
+}
+
+// This function mirrors the above function, but also accepts a context for use
+// with session transactions
+func (mdbc *MongoDbController) getImageDataByIdWithCollection(id string, collection *mongo.Collection, ctx context.Context) (imgDoc dbController.ImageDocument, err error) {
+	idObj, idObjErr := primitive.ObjectIDFromHex(id)
+
+	if idObjErr != nil {
+		err = dbController.NewInvalidInputError("invalid id")
+		return
+	}
+
+	matchStage := mdbc.getBasicMatcher(idObj)
+
+	return mdbc.getImageDataWithMatcherAndCollection(matchStage, true, collection, ctx)
+}
+
+func (mdbc *MongoDbController) getBasicMatcher(idObj primitive.ObjectID) bson.D {
+	return bson.D{
 		{
 			Key: "$match",
 			Value: bson.M{
@@ -507,13 +531,11 @@ func (mdbc *MongoDbController) GetImageDataById(id string, showPrivate bool) (im
 			},
 		},
 	}
-
-	return mdbc.GetImageDataWithMatcher(matchStage, showPrivate)
 }
 
 // GetImageDataWithMatcher is a convenience function that uses the aggregation pipeline
 // to compile image documents using MongoDB's variation of an inner join.
-func (mdbc *MongoDbController) GetImageDataWithMatcher(matchStage bson.D, showPrivate bool) (imgDoc dbController.ImageDocument, err error) {
+func (mdbc *MongoDbController) getImageDataWithMatcherAndCollection(matchStage bson.D, showPrivate bool, collection *mongo.Collection, ctx context.Context) (imgDoc dbController.ImageDocument, err error) {
 	// We're expecting only one value, but we use a limit, just in case.
 	// Uncertain how much this required.
 	limitStage := bson.D{{
@@ -532,9 +554,6 @@ func (mdbc *MongoDbController) GetImageDataWithMatcher(matchStage bson.D, showPr
 	} else {
 		projectStage = mdbc.getPublicImageProjectStage()
 	}
-
-	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
-	defer cancel()
 
 	// The actual aggregation call. The order of the stages is important.
 	cursor, aggErr := collection.Aggregate(ctx, mongo.Pipeline{
@@ -685,15 +704,19 @@ func (mdbc *MongoDbController) GetImagesData(page, pagination int, sort dbContro
 
 // Gets an image file by its ID.
 func (mdbc *MongoDbController) GetImageFileById(id string) (doc dbController.ImageFileDocument, err error) {
+	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
+	defer cancel()
+
+	return mdbc.getImageFileByIdWithCollection(id, collection, ctx)
+}
+
+func (mdbc *MongoDbController) getImageFileByIdWithCollection(id string, collection *mongo.Collection, ctx context.Context) (doc dbController.ImageFileDocument, err error) {
 	idObj, idObjErr := primitive.ObjectIDFromHex(id)
 
 	if idObjErr != nil {
 		err = dbController.NewInvalidInputError("invalid id")
 		return
 	}
-
-	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
-	defer cancel()
 
 	var result ImageFileDocResult
 
@@ -709,6 +732,7 @@ func (mdbc *MongoDbController) GetImageFileById(id string) (doc dbController.Ima
 	}
 
 	return result.getImageFileDocument(), nil
+
 }
 
 // This function determines if an image has any files. This is to be used for the
@@ -773,19 +797,21 @@ func (mdbc *MongoDbController) EditImageFileData(doc dbController.EditImageFileD
 	return
 }
 
+// This function deletes an image document, including the files associated with it
 func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument) error {
+	docId, docIdErr := primitive.ObjectIDFromHex(doc.Id)
+	if docIdErr != nil {
+		return docIdErr
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	imgFileCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_FILE_COLLECTION)
 	imgCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_COLLECTION)
 
+	// We use a session to make the writes.
 	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
-		docId, docIdErr := primitive.ObjectIDFromHex(doc.Id)
-		if docIdErr != nil {
-			return nil, docIdErr
-		}
-
 		_, ifErr := imgFileCollection.DeleteMany(ctx, bson.M{
 			"imageId": docId,
 		})
@@ -794,16 +820,22 @@ func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument)
 			return nil, ifErr
 		}
 
-		result, iErr := imgCollection.DeleteOne(ctx, bson.M{
-			"_id": docId,
-		})
+		// result, iErr := imgCollection.DeleteOne(ctx, bson.M{
+		// 	"_id": docId,
+		// })
 
-		if iErr != nil {
-			return nil, iErr
-		}
+		// if iErr != nil {
+		// 	return nil, iErr
+		// }
 
-		if result.DeletedCount == 0 {
-			return nil, dbController.NewInvalidInputError("invalid id. no image deleted")
+		// if result.DeletedCount == 0 {
+		// 	return nil, dbController.NewInvalidInputError("invalid id. no image deleted")
+		// }
+
+		err := mdbc.DeleteImageDataWithContext(docId, imgCollection, sessCtx)
+
+		if err != nil {
+			return nil, err
 		}
 
 		return nil, nil
@@ -826,47 +858,90 @@ func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument)
 	return nil
 }
 
-func (mdbc *MongoDbController) DeleteImageFile(doc dbController.DeleteImageFileDocument) error {
-	imgFile, imgErr := mdbc.GetImageFileById(doc.Id)
-
-	if imgErr != nil {
-		return imgErr
-	}
-
-	docId, docIdErr := primitive.ObjectIDFromHex(doc.Id)
-	if docIdErr != nil {
-		return docIdErr
-	}
-
-	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
-	defer cancel()
-
-	result, err := collection.DeleteOne(ctx, bson.M{
+func (mdbc *MongoDbController) DeleteImageDataWithContext(docId primitive.ObjectID, imgCollection *mongo.Collection, ctx context.Context) (err error) {
+	result, err := imgCollection.DeleteOne(ctx, bson.M{
 		"_id": docId,
 	})
 
 	if err != nil {
-		return err
+		return
 	}
 
 	if result.DeletedCount == 0 {
-		return dbController.NewInvalidInputError("invalid id. no image files deleted")
+		return dbController.NewInvalidInputError("invalid id. no image deleted")
 	}
 
-	img, err := mdbc.GetImageDataById(imgFile.ImageId, true)
+	return
+}
+
+// This deletes an image file document. If it deletes the last image associated
+// with an image document, it also deletes the image document.
+func (mdbc *MongoDbController) DeleteImageFile(doc dbController.DeleteImageFileDocument) (imgDoc dbController.ImageFileDocument, err error) {
+	docId, err := primitive.ObjectIDFromHex(doc.Id)
+	if err != nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	imgFileCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_FILE_COLLECTION)
+	imgCollection := mdbc.MongoClient.Database(mdbc.dbName).Collection(IMAGE_COLLECTION)
+
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		var result ImageFileDocResult
+
+		// We use the FindOneAndDelete function to get the value we just deleted so
+		// that we can do three things with it:
+		// Get the ImageId and determine if any more images exist for that ImageId
+		// Delete the Image if no images exist for that ImageId
+		// Get the filename so we can delete the Image file
+		err = imgFileCollection.FindOneAndDelete(sessCtx, bson.M{
+			"_id": docId,
+		}).Decode(&result)
+
+		if err != nil {
+			return nil, err
+		}
+
+		// imgDoc is the eventual returned value
+		imgDoc = result.getImageFileDocument()
+
+		img, err := mdbc.getImageDataByIdWithCollection(imgDoc.ImageId, imgCollection, sessCtx)
+
+		if err != nil {
+			return nil, err
+		}
+
+		// Let's not use DeleteImage. It attempts to delete from IMAGE_FILE_COLLECTION too
+		if len(img.ImageFiles) == 0 {
+			docId, docIdErr := primitive.ObjectIDFromHex(img.Id)
+			if docIdErr != nil {
+				return nil, docIdErr
+			}
+
+			return imgDoc, mdbc.DeleteImageDataWithContext(docId, imgCollection, sessCtx)
+			// return imgDoc, mdbc.DeleteImage(dbController.DeleteImageDocument{Id: img.Id})
+		}
+
+		return imgDoc, nil
+	}
+
+	session, err := mdbc.MongoClient.StartSession()
 
 	if err != nil {
-		return err
+		return
+	}
+	defer session.EndSession(ctx)
+
+	_, err = session.WithTransaction(ctx, callback)
+
+	if err != nil {
+		session.AbortTransaction(ctx)
+		return
 	}
 
-	if len(img.ImageFiles) == 0 {
-		did := dbController.DeleteImageDocument{Id: img.Id}
-		return mdbc.DeleteImage(did)
-	}
-
-	// Put the above in a session?
-
-	return nil
+	return
 }
 
 func (mdbc *MongoDbController) AddRequestLog(log logging.RequestLogData) error {
