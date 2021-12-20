@@ -357,7 +357,7 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 		fileInsertResult, fileInsertErr := imgFileCollection.InsertMany(sessCtx, images)
 
 		if fileInsertErr != nil {
-			return nil, fileInsertErr
+			return nil, dbController.NewDBError(fileInsertErr.Error())
 		}
 
 		if len(fileInsertResult.InsertedIDs) == 0 {
@@ -371,7 +371,7 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 	// Here, we start a session for the purpose of making several writes at once.
 	session, sessionErr := mdbc.MongoClient.StartSession()
 	if sessionErr != nil {
-		return "", sessionErr
+		return "", dbController.NewDBError(sessionErr.Error())
 	}
 	defer session.EndSession(ctx)
 
@@ -387,7 +387,7 @@ func (mdbc *MongoDbController) AddImageData(doc dbController.AddImageDocument) (
 	if id, ok := result.(string); ok {
 		return id, nil
 	} else {
-		return "", errors.New("invalid database response")
+		return "", dbController.NewDBError("invalid database response")
 	}
 }
 
@@ -475,15 +475,18 @@ func (mdbc *MongoDbController) GetImageByName(name string) (imgDoc dbController.
 
 	var result ImageFileDocResult
 
-	findErr := collection.FindOne(
+	err = collection.FindOne(
 		ctx,
 		bson.M{
 			"filename": name,
 		},
 	).Decode(&result)
 
-	if findErr != nil {
-		return imgDoc, dbController.NewDBError(findErr.Error())
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return imgDoc, dbController.NewNoResultsError("")
+		}
+		return imgDoc, dbController.NewDBError(err.Error())
 	}
 
 	return result.getImageFileDocument(), nil
@@ -522,6 +525,8 @@ func (mdbc *MongoDbController) getImageDataByIdWithCollection(id string, collect
 	return mdbc.getImageDataWithMatcherAndCollection(matchStage, true, collection, ctx)
 }
 
+// The basic matcher is used a couple times. By moving assignment of the matcher to its
+// own function we reduce some of the 'noise' in the application.
 func (mdbc *MongoDbController) getBasicMatcher(idObj primitive.ObjectID) bson.D {
 	return bson.D{
 		{
@@ -595,101 +600,85 @@ func (mdbc *MongoDbController) GetImagesData(page, pagination int, sort dbContro
 	collection, ctx, cancel := mdbc.getCollection(IMAGE_COLLECTION)
 	defer cancel()
 
+	// The aggregation pipeline. Essentially a mutable slice
 	pipeline := mongo.Pipeline{}
 
-	matchStage := bson.D{{Key: "$match", Value: bson.M{}}}
-	pipeline = append(pipeline, matchStage)
+	// The match stage is for matching by nothing in particular
+	pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.M{}}})
 
-	// This stage is used to generate lower case letters for each file name
-	// on the chance that we're sorting by file name.
-	lowerCaseLettersStage := bson.D{{
-		Key: "$project",
-		Value: bson.M{
-			"filename": 1,
-			"lowercaseFilename": bson.M{
-				"$toLower": "$filename",
-			},
-		},
-	}}
-
-	var sortStage bson.D
-
+	// This is the sort stage
 	switch sort.Sortby {
 	case dbController.Name:
-		pipeline = append(pipeline, lowerCaseLettersStage)
-		sortStage = bson.D{{
+		pipeline = append(pipeline, mdbc.getLowerCaseStage())
+		pipeline = append(pipeline, bson.D{{
 			Key:   "$sort",
 			Value: bson.M{"lowercaseFilename": 1},
-		}}
+		}})
 	case dbController.NameReverse:
-		pipeline = append(pipeline, lowerCaseLettersStage)
-		sortStage = bson.D{{
+		pipeline = append(pipeline, mdbc.getLowerCaseStage())
+		pipeline = append(pipeline, bson.D{{
 			Key:   "$sort",
 			Value: bson.M{"lowercaseFilename": -1},
-		}}
+		}})
 	case dbController.DateAddedReverse:
-		sortStage = bson.D{{
+		pipeline = append(pipeline, bson.D{{
 			Key:   "$sort",
 			Value: bson.M{"dateAdded": 1},
-		}}
+		}})
 	// case dbController.DateAdded:
 	default:
-		sortStage = bson.D{{
+		pipeline = append(pipeline, bson.D{{
 			Key:   "$sort",
 			Value: bson.M{"dateAdded": -1},
-		}}
+		}})
 	}
-	pipeline = append(pipeline, sortStage)
 
-	skipStage := bson.D{{
+	// This is the skip stage. We skip based upon pagination and current page.
+	pipeline = append(pipeline, bson.D{{
 		Key:   "$skip",
 		Value: int64((page - 1) * pagination),
-	}}
+	}})
 
-	limitStage := bson.D{{
+	// This is the limit stage. We limit based upon pagination (how many results per page)
+	pipeline = append(pipeline, bson.D{{
 		Key:   "$limit",
 		Value: int32(pagination),
-	}}
+	}})
 
-	pipeline = append(pipeline, skipStage)
-	pipeline = append(pipeline, limitStage)
-
+	// We get the common author and image file lookup stages
 	authorLookupStage, imageFileLookupStage := mdbc.GetImageDataAggregationStages()
 
 	pipeline = append(pipeline, authorLookupStage)
 	pipeline = append(pipeline, imageFileLookupStage)
 
-	// We use the showPrivate boolean to determine whether we should use the more
-	// or less permissive projection stage
-	var projectStage bson.D
+	// This is the projection stage. We use the showPrivate boolean to determine whether
+	// we should use the more or less permissive projection stage
 	if !sort.ShowPrivate {
-		projectStage = mdbc.getPublicImageProjectStage()
+		pipeline = append(pipeline, mdbc.getPublicImageProjectStage())
 	} else {
-		projectStage = mdbc.getImageProjectStage()
+		pipeline = append(pipeline, mdbc.getImageProjectStage())
+
 	}
 
-	pipeline = append(pipeline, projectStage)
+	// The aggregation stages:
+	// matchStage
+	// lowerCaseLettersStage
+	// sortStage
+	// skipStage
+	// limitStage
+	// authorLookupStage
+	// imageFileLookupStage
+	// projectStage
+	cursor, err := collection.Aggregate(ctx, pipeline)
 
-	cursor, aggErr := collection.Aggregate(ctx, pipeline)
-	// cursor, aggErr := collection.Aggregate(ctx, mongo.Pipeline{
-	// 	matchStage,
-	// 	lowerCaseLettersStage,
-	// 	sortStage,
-	// 	skipStage,
-	// 	limitStage,
-	// 	authorLookupStage,
-	// 	imageFileLookupStage,
-	// 	projectStage,
-	// })
-
-	if aggErr != nil {
-		err = aggErr
+	if err != nil {
+		err = dbController.NewDBError("error getting results")
 		return
 	}
 
 	var results []ImageDocResult
-	if allErr := cursor.All(ctx, &results); allErr != nil {
-		err = errors.New("error parsing results")
+	if err = cursor.All(ctx, &results); err != nil {
+		err = dbController.NewDBError("error parsing results")
 		return
 	}
 
@@ -702,15 +691,25 @@ func (mdbc *MongoDbController) GetImagesData(page, pagination int, sort dbContro
 	return
 }
 
+// This stage is used to generate lower case letters for each file name for when we're
+// sorting by file name.
+func (mdbc *MongoDbController) getLowerCaseStage() bson.D {
+	return bson.D{{
+		Key: "$project",
+		Value: bson.M{
+			"filename": 1,
+			"lowercaseFilename": bson.M{
+				"$toLower": "$filename",
+			},
+		},
+	}}
+}
+
 // Gets an image file by its ID.
-func (mdbc *MongoDbController) GetImageFileById(id string) (doc dbController.ImageFileDocument, err error) {
+func (mdbc *MongoDbController) GetImageFileById(id string) (imgDoc dbController.ImageFileDocument, err error) {
 	collection, ctx, cancel := mdbc.getCollection(IMAGE_FILE_COLLECTION)
 	defer cancel()
 
-	return mdbc.getImageFileByIdWithCollection(id, collection, ctx)
-}
-
-func (mdbc *MongoDbController) getImageFileByIdWithCollection(id string, collection *mongo.Collection, ctx context.Context) (doc dbController.ImageFileDocument, err error) {
 	idObj, idObjErr := primitive.ObjectIDFromHex(id)
 
 	if idObjErr != nil {
@@ -720,19 +719,21 @@ func (mdbc *MongoDbController) getImageFileByIdWithCollection(id string, collect
 
 	var result ImageFileDocResult
 
-	findErr := collection.FindOne(
+	err = collection.FindOne(
 		ctx,
 		bson.M{
 			"_id": idObj,
 		},
 	).Decode(&result)
 
-	if findErr != nil {
-		return doc, findErr
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return imgDoc, dbController.NewNoResultsError("")
+		}
+		return imgDoc, dbController.NewDBError(err.Error())
 	}
 
 	return result.getImageFileDocument(), nil
-
 }
 
 // This function determines if an image has any files. This is to be used for the
@@ -832,7 +833,7 @@ func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument)
 		// 	return nil, dbController.NewInvalidInputError("invalid id. no image deleted")
 		// }
 
-		err := mdbc.DeleteImageDataWithContext(docId, imgCollection, sessCtx)
+		err := mdbc.deleteImageDataWithContext(docId, imgCollection, sessCtx)
 
 		if err != nil {
 			return nil, err
@@ -858,7 +859,10 @@ func (mdbc *MongoDbController) DeleteImage(doc dbController.DeleteImageDocument)
 	return nil
 }
 
-func (mdbc *MongoDbController) DeleteImageDataWithContext(docId primitive.ObjectID, imgCollection *mongo.Collection, ctx context.Context) (err error) {
+// This is a convenience function that performs the delete operation given the the
+// values required to perform the delete function. Some functions want to run this
+// set of operations without the set up found in DeleteImage.
+func (mdbc *MongoDbController) deleteImageDataWithContext(docId primitive.ObjectID, imgCollection *mongo.Collection, ctx context.Context) (err error) {
 	result, err := imgCollection.DeleteOne(ctx, bson.M{
 		"_id": docId,
 	})
@@ -910,23 +914,28 @@ func (mdbc *MongoDbController) DeleteImageFile(doc dbController.DeleteImageFileD
 		img, err := mdbc.getImageDataByIdWithCollection(imgDoc.ImageId, imgCollection, sessCtx)
 
 		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return nil, dbController.NewNoResultsError("")
+			}
 			return nil, err
 		}
 
-		// Let's not use DeleteImage. It attempts to delete from IMAGE_FILE_COLLECTION too
+		// We run this if statement if the image files left for this image are zero.
 		if len(img.ImageFiles) == 0 {
+			// Here, we get an ObjectID from the hex value, and call the delete function
+			// get rid of the image data.
 			docId, docIdErr := primitive.ObjectIDFromHex(img.Id)
 			if docIdErr != nil {
 				return nil, docIdErr
 			}
 
-			return imgDoc, mdbc.DeleteImageDataWithContext(docId, imgCollection, sessCtx)
-			// return imgDoc, mdbc.DeleteImage(dbController.DeleteImageDocument{Id: img.Id})
+			return imgDoc, mdbc.deleteImageDataWithContext(docId, imgCollection, sessCtx)
 		}
 
 		return imgDoc, nil
 	}
 
+	// Start the session, defer ending the session, run the transaction in the session
 	session, err := mdbc.MongoClient.StartSession()
 
 	if err != nil {
@@ -937,6 +946,7 @@ func (mdbc *MongoDbController) DeleteImageFile(doc dbController.DeleteImageFileD
 	_, err = session.WithTransaction(ctx, callback)
 
 	if err != nil {
+		// I'm not sure this function is required
 		session.AbortTransaction(ctx)
 		return
 	}

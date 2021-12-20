@@ -19,7 +19,7 @@ type DuplicateEntryError struct{ ErrMsg string }
 func (err DuplicateEntryError) Error() string { return err.ErrMsg }
 func NewDuplicateEntryError(msg string) error { return DuplicateEntryError{msg} }
 
-// Used to communicate that the value provided as an index cannot be parsed
+// Used to communicate that the value provided cannot be parsed or used
 type InvalidInputError struct{ ErrMsg string }
 
 func (err InvalidInputError) Error() string { return err.ErrMsg }

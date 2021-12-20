@@ -33,7 +33,6 @@ func (srv *ImageServer) SetRoutes() {
 func (srv *ImageServer) SetMaxImageUploadSize(ctx *gin.Context) {
 	// TODO set an env variable for max body size
 	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, 5<<20)
-	ctx.Next()
 }
 
 func (srv *ImageServer) TestLoggedIn(ctx *gin.Context) {
@@ -53,8 +52,6 @@ func (srv *ImageServer) ParseRequestUserAuth(ctx *gin.Context) {
 	} else {
 		srv.ParseRequestUserCookies(ctx)
 	}
-
-	ctx.Next()
 }
 
 func (srv *ImageServer) ParseRequestUserHeaders(ctx *gin.Context) {
@@ -111,36 +108,19 @@ func (srv *ImageServer) EnsureLoggedIn(ctx *gin.Context) {
 	ctx.Next()
 }
 
+// GET
+
 func (srv *ImageServer) GetImagesByFirstPage(ctx *gin.Context) {
 	srv.GetImages(ctx, 1)
 }
 
+// We won't worry about throwing errors in this function. We'll just use the default
+// value of 1 (first page) if the value for page is mangled or garbage
 func (srv *ImageServer) GetImagesByPage(ctx *gin.Context) {
-	page := ctx.Param("page")
-
-	// Not sure this will ever happen
-	if len(page) == 0 {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "invalid page number",
-			},
-		)
-
-		return
-	}
-
-	pageNum, pageNumErr := strconv.Atoi(page)
+	pageNum, pageNumErr := strconv.Atoi(ctx.Param("page"))
 
 	if pageNumErr != nil {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "invalid page number",
-			},
-		)
-
-		return
+		pageNum = 1
 	}
 
 	srv.GetImages(ctx, pageNum)
@@ -161,12 +141,7 @@ func (srv *ImageServer) GetImages(ctx *gin.Context, page int) {
 	images, err := srv.ImageController.GetImages(page, paginationNum, sortBy, showPrivate)
 
 	if err != nil {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": err.Error(),
-			},
-		)
+		handleControllerErrors(ctx, err)
 		return
 	}
 
@@ -183,10 +158,14 @@ func (srv *ImageServer) GetImages(ctx *gin.Context, page int) {
 }
 
 func (srv *ImageServer) GetImageByName(ctx *gin.Context) {
-	filepath, imgDoc, fileErr := srv.ImageController.GetImageByName(ctx)
+	filepath, imgDoc, err := srv.ImageController.GetImageByName(ctx)
 
-	// TODO abstract if images can be seen
-	if fileErr != nil || !canViewImage(ctx, imgDoc) {
+	if err != nil {
+		handleControllerErrors(ctx, err)
+		return
+	}
+
+	if !canViewImage(ctx, imgDoc) {
 		ctx.AbortWithStatusJSON(
 			http.StatusNotFound,
 			gin.H{
@@ -203,48 +182,13 @@ func (srv *ImageServer) GetImageByName(ctx *gin.Context) {
 	ctx.File(filepath)
 }
 
-func userLoggedIn(ctx *gin.Context) bool {
-	return len(ctx.GetString("userId")) > 0
-}
-
-// Determines if the image requires privileges and whether the requesting user
-// has those privileges
-func canViewImage(ctx *gin.Context, imgDoc dbController.ImageFileDocument) bool {
-	token := ctx.GetString("userId")
-
-	// If not private, return true
-	if !imgDoc.Private {
-		return true
-	}
-
-	// If we get here, the image is private. We just determine if there's a token
-	return len(token) > 0
-}
-
 func (srv *ImageServer) GetImageById(ctx *gin.Context) {
-	id := ctx.Param("imageId")
-
-	// Not sure this will ever happen
-	if len(id) == 0 {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": "invalid id",
-			},
-		)
-
-		return
-	}
-
 	showPrivate := userLoggedIn(ctx)
 
-	doc, err := srv.ImageController.GetImageDataById(id, showPrivate)
+	doc, err := srv.ImageController.GetImageDataById(ctx, showPrivate)
 
 	if err != nil {
-		ctx.AbortWithStatusJSON(
-			http.StatusNotFound,
-			gin.H{},
-		)
+		handleControllerErrors(ctx, err)
 		return
 	}
 
@@ -253,6 +197,8 @@ func (srv *ImageServer) GetImageById(ctx *gin.Context) {
 		doc.GetMap(),
 	)
 }
+
+// POST
 
 // POST /add-image
 // Adding an Image to the server. It accomplishes the task as follows:
@@ -265,15 +211,11 @@ func (srv *ImageServer) GetImageById(ctx *gin.Context) {
 // undo command will revert either action in order to prevent ghost
 // entries from existing.
 func (srv *ImageServer) PostAddImage(ctx *gin.Context) {
-	fileSaveErr := srv.ImageController.AddImageFile(ctx)
+	err := srv.ImageController.AddImageFile(ctx)
 
-	if fileSaveErr != nil {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": fileSaveErr.Error(),
-			},
-		)
+	if err != nil {
+		handleControllerErrors(ctx, err)
+
 		return
 	}
 
@@ -297,12 +239,8 @@ func (srv *ImageServer) PostEditImageFile(ctx *gin.Context) {
 	err := srv.ImageController.EditImageFileDocument(body)
 
 	if err != nil {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": err.Error(),
-			},
-		)
+		handleControllerErrors(ctx, err)
+
 		return
 	}
 
@@ -327,12 +265,7 @@ func (srv *ImageServer) PostDeleteImage(ctx *gin.Context) {
 	err := srv.ImageController.DeleteImageDocument(body.GetImageDocument())
 
 	if err != nil {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": err.Error(),
-			},
-		)
+		handleControllerErrors(ctx, err)
 		return
 	}
 
@@ -357,12 +290,7 @@ func (srv *ImageServer) PostDeleteImageFile(ctx *gin.Context) {
 	err := srv.ImageController.DeleteImageFileDocument(body.GetImageFileDocument())
 
 	if err != nil {
-		ctx.AbortWithStatusJSON(
-			http.StatusBadRequest,
-			gin.H{
-				"error": err.Error(),
-			},
-		)
+		handleControllerErrors(ctx, err)
 		return
 	}
 
@@ -370,4 +298,45 @@ func (srv *ImageServer) PostDeleteImageFile(ctx *gin.Context) {
 		http.StatusOK,
 		gin.H{},
 	)
+}
+
+func handleControllerErrors(ctx *gin.Context, err error) {
+	var status int
+	var message string
+	switch err.(type) {
+	case dbController.InvalidInputError:
+		status = http.StatusBadRequest
+		message = "invalid input"
+	case dbController.NoResultsError:
+		status = http.StatusNotFound
+		message = "not found"
+	default:
+		status = http.StatusInternalServerError
+		message = "internal server error"
+	}
+
+	ctx.AbortWithStatusJSON(
+		status,
+		gin.H{
+			"error": message,
+		},
+	)
+}
+
+func userLoggedIn(ctx *gin.Context) bool {
+	return len(ctx.GetString("userId")) > 0
+}
+
+// Determines if the image requires privileges and whether the requesting user
+// has those privileges
+func canViewImage(ctx *gin.Context, imgDoc dbController.ImageFileDocument) bool {
+	token := ctx.GetString("userId")
+
+	// If not private, return true
+	if !imgDoc.Private {
+		return true
+	}
+
+	// If we get here, the image is private. We just determine if there's a token
+	return len(token) > 0
 }

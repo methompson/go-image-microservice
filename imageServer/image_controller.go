@@ -65,7 +65,7 @@ func (ic *ImageController) AddImageFile(ctx *gin.Context) error {
 	return nil
 }
 
-func (ic *ImageController) GetImages(page, paginationNum int, sortBy string, showPrivate bool) (docs []dbController.ImageDocument, err error) {
+func (ic *ImageController) GetImages(page, paginationNum int, sortBy string, showPrivate bool) ([]dbController.ImageDocument, error) {
 	var _pagination int
 	if paginationNum <= 0 {
 		_pagination = 50
@@ -76,12 +76,16 @@ func (ic *ImageController) GetImages(page, paginationNum int, sortBy string, sho
 	filter := dbController.MakeSortImageFilter(sortBy)
 	filter.ShowPrivate = showPrivate
 
-	docs, err = (*ic.DBController).GetImagesData(page, _pagination, filter)
-	return
+	return (*ic.DBController).GetImagesData(page, _pagination, filter)
 }
 
 func (ic *ImageController) GetImageByName(ctx *gin.Context) (filepath string, imgDoc dbController.ImageFileDocument, err error) {
 	name := ctx.Param("imageName")
+
+	if len(name) == 0 {
+		err = dbController.NewInvalidInputError("invalid filename")
+		return
+	}
 
 	fmt.Println(name)
 
@@ -100,7 +104,15 @@ func (ic *ImageController) GetImageByName(ctx *gin.Context) (filepath string, im
 	return
 }
 
-func (ic *ImageController) GetImageDataById(id string, showPrivate bool) (doc dbController.ImageDocument, err error) {
+func (ic *ImageController) GetImageDataById(ctx *gin.Context, showPrivate bool) (doc dbController.ImageDocument, err error) {
+	id := ctx.Param("imageId")
+
+	// Not sure this will ever happen
+	if len(id) == 0 {
+		err = dbController.NewInvalidInputError("invalid filename")
+		return
+	}
+
 	doc, err = (*ic.DBController).GetImageDataById(id, showPrivate)
 	return
 }
